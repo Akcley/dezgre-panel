@@ -1,7 +1,5 @@
-
 const CONFIG = {
-  statusApiUrl: "", // Luego colocaremos: https://status.dezgre.com/api/status
-  requestTimeoutMs: 6000,
+  statusApiUrl: "https://dezgre-status.nickbrya007.workers.dev/api/status",
   services: [
     {
       id: "dokploy",
@@ -90,6 +88,7 @@ function renderServices() {
 function setServiceState(id, state) {
   const card = document.querySelector(`[data-service="${id}"]`);
   if (!card) return;
+
   const status = card.querySelector(".service-status");
   const dot = status.querySelector(".status-dot");
   const label = status.querySelector(".label");
@@ -100,51 +99,6 @@ function setServiceState(id, state) {
     state === "online" ? "Activo" :
     state === "offline" ? "Sin conexión" :
     "Verificando";
-}
-
-async function pingUrl(url) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), CONFIG.requestTimeoutMs);
-
-  try {
-    await fetch(`${url}${url.includes("?") ? "&" : "?"}_check=${Date.now()}`, {
-      method: "GET",
-      mode: "no-cors",
-      cache: "no-store",
-      signal: controller.signal
-    });
-    return true;
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function checkServices() {
-  overallText.textContent = "Verificando servicios…";
-  CONFIG.services.forEach(service => setServiceState(service.id, "checking"));
-
-  const results = await Promise.all(
-    CONFIG.services.map(async service => ({
-      id: service.id,
-      online: await pingUrl(service.url)
-    }))
-  );
-
-  results.forEach(result => setServiceState(result.id, result.online ? "online" : "offline"));
-
-  const onlineCount = results.filter(item => item.online).length;
-  overallText.textContent =
-    onlineCount === results.length
-      ? "Todos los servicios en línea"
-      : `${onlineCount} de ${results.length} servicios en línea`;
-
-  lastCheck.textContent = `Última revisión: ${new Date().toLocaleTimeString("es-PE", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit"
-  })}`;
 }
 
 function saveTheme(theme) {
@@ -160,13 +114,12 @@ function initTheme() {
 themeToggle.addEventListener("click", () => {
   const current = document.documentElement.dataset.theme;
   saveTheme(current === "dark" ? "light" : "dark");
-  drawPlaceholderCharts();
 });
-
-refreshBtn.addEventListener("click", checkServices);
 
 function drawLine(canvasId, values) {
   const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+
   const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
   const width = canvas.clientWidth || 260;
@@ -188,16 +141,17 @@ function drawLine(canvasId, values) {
   ctx.lineTo(width, height - 1);
   ctx.stroke();
 
-  const max = Math.max(...values, 1);
-  const min = Math.min(...values, 0);
+  const safeValues = values.length > 1 ? values : [values[0] || 0, values[0] || 0];
+  const max = Math.max(...safeValues, 1);
+  const min = Math.min(...safeValues, 0);
   const range = max - min || 1;
 
   ctx.strokeStyle = lineColor;
   ctx.lineWidth = 1.7;
   ctx.beginPath();
 
-  values.forEach((value, index) => {
-    const x = (index / (values.length - 1)) * width;
+  safeValues.forEach((value, index) => {
+    const x = (index / (safeValues.length - 1)) * width;
     const y = height - 7 - ((value - min) / range) * (height - 14);
     if (index === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
@@ -206,50 +160,81 @@ function drawLine(canvasId, values) {
   ctx.stroke();
 }
 
-function drawPlaceholderCharts() {
-  drawLine("cpuChart", [12,15,13,18,17,20,16,19,15,14,17,13,12,11,14,12]);
-  drawLine("memoryChart", [18,19,19,20,20,19,21,20,20,21,20,20,19,20,19,19]);
-  drawLine("diskChart", [17,17,17,18,18,18,18,19,19,19,19,19,19,19,19,19]);
+function formatUptime(seconds) {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  return `${days} días ${hours} h`;
 }
 
-async function loadServerMetrics() {
+async function loadStatus() {
   const badge = document.getElementById("serverBadge");
 
-  if (!CONFIG.statusApiUrl) {
-    badge.innerHTML = '<span class="status-dot online"></span><span>Panel externo activo</span>';
-    document.getElementById("cpuValue").textContent = "Pendiente";
-    document.getElementById("memoryValue").textContent = "Pendiente";
-    document.getElementById("diskValue").textContent = "Pendiente";
-    drawPlaceholderCharts();
-    return;
-  }
+  overallText.textContent = "Verificando servicios…";
+  CONFIG.services.forEach(service => setServiceState(service.id, "checking"));
 
   try {
-    const response = await fetch(CONFIG.statusApiUrl, { cache: "no-store" });
-    if (!response.ok) throw new Error("Estado no disponible");
+    const response = await fetch(`${CONFIG.statusApiUrl}?t=${Date.now()}`, {
+      cache: "no-store"
+    });
+
+    if (!response.ok) throw new Error("No se pudo consultar el estado");
 
     const data = await response.json();
+
     document.getElementById("cpuValue").textContent = `${data.server.cpu}%`;
-    document.getElementById("memoryValue").textContent = `${data.server.memory}%`;
+    document.getElementById("memoryValue").textContent =
+      `${data.server.memory}% · ${data.server.memoryUsed}/${data.server.memoryTotal} GB`;
     document.getElementById("diskValue").textContent =
-      `${data.server.diskUsed} / ${data.server.diskTotal} GB`;
+      `${data.server.diskUsed}/${data.server.diskTotal} GB`;
 
     drawLine("cpuChart", data.history?.cpu || [data.server.cpu]);
     drawLine("memoryChart", data.history?.memory || [data.server.memory]);
     drawLine("diskChart", data.history?.disk || [data.server.diskPercent]);
 
     badge.innerHTML = '<span class="status-dot online"></span><span>Servidor en línea</span>';
-    document.getElementById("metricNote").textContent = "Métricas actualizadas desde el VPS.";
-  } catch {
+
+    document.getElementById("metricNote").textContent =
+      `Entrada: ${data.server.incomingTrafficMb} MB · ` +
+      `Salida: ${data.server.outgoingTrafficMb} MB · ` +
+      `Encendido: ${formatUptime(data.server.uptimeSeconds)}`;
+
+    let onlineCount = 0;
+
+    CONFIG.services.forEach(service => {
+      const item = data.services?.[service.id];
+      const online = item?.online === true;
+      setServiceState(service.id, online ? "online" : "offline");
+      if (online) onlineCount++;
+    });
+
+    overallText.textContent =
+      onlineCount === CONFIG.services.length
+        ? "Todos los servicios en línea"
+        : `${onlineCount} de ${CONFIG.services.length} servicios en línea`;
+
+    lastCheck.textContent = `Última revisión: ${new Date(data.checkedAt).toLocaleTimeString("es-PE", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    })}`;
+  } catch (error) {
     badge.innerHTML = '<span class="status-dot offline"></span><span>Servidor sin conexión</span>';
+    document.getElementById("cpuValue").textContent = "No disponible";
+    document.getElementById("memoryValue").textContent = "No disponible";
+    document.getElementById("diskValue").textContent = "No disponible";
+    document.getElementById("metricNote").textContent =
+      "No se pudo consultar Hostinger. El panel continúa disponible.";
+
+    CONFIG.services.forEach(service => setServiceState(service.id, "offline"));
+    overallText.textContent = "No se pudo verificar el servidor";
+    lastCheck.textContent = "Última revisión fallida";
   }
 }
 
+refreshBtn.addEventListener("click", loadStatus);
+
 initTheme();
 renderServices();
-checkServices();
-loadServerMetrics();
+loadStatus();
 
-setInterval(checkServices, 60000);
-setInterval(loadServerMetrics, 30000);
-window.addEventListener("resize", drawPlaceholderCharts);
+setInterval(loadStatus, 60000);
