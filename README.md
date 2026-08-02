@@ -1,81 +1,99 @@
 # Panel General Dezgre
 
-Panel estático preparado para publicarse mediante GitHub Pages.
+Panel estático de `panel.dezgre.com`. Las métricas del VPS proceden de
+`/api/status` y la lista de aplicaciones se obtiene de `/api/services` en el
+Worker `dezgre-status`.
 
-## Archivos
+La lista ya no está escrita a mano: en cada carga y cada 60 segundos el panel
+vuelve a consultar Dokploy. Por eso las altas y bajas se reflejan
+automáticamente. Cualquier servicio cuyo id, nombre o URL contenga `ollama` se
+descarta tanto en el Worker como en el navegador.
 
-- `index.html`
-- `styles.css`
-- `app.js`
-- `CNAME`
+## Publicar el panel
 
-## Publicación en GitHub Pages
+Los archivos `index.html`, `styles.css` y `app.js` pueden publicarse directamente
+con GitHub Pages. Si cambia el dominio del Worker, actualiza `statusApiUrl` y
+`servicesApiUrl` al inicio de `app.js`.
 
-1. Crea un repositorio llamado `dezgre-panel`.
-2. Sube todos los archivos de esta carpeta a la rama `main`.
-3. Ve a **Settings → Pages**.
-4. En **Build and deployment**, selecciona:
-   - Source: `Deploy from a branch`
-   - Branch: `main`
-   - Folder: `/ (root)`
-5. Guarda.
-6. En **Custom domain**, escribe `panel.dezgre.com`.
-7. Activa **Enforce HTTPS** cuando aparezca disponible.
+## Modificación de `dezgre-status`
 
-## DNS
+El archivo [`cloudflare/dokploy-services.js`](cloudflare/dokploy-services.js)
+contiene la implementación que debe añadirse al Worker. Se ha dejado separado
+porque el código fuente actual de `dezgre-status` no forma parte de este
+repositorio y no conviene reemplazar su ruta `/api/status`, que ya entrega las
+métricas del VPS.
 
-Crea este registro en la zona DNS de dezgre.com:
+### 1. Variables de Cloudflare
 
-- Tipo: `CNAME`
-- Nombre: `panel`
-- Destino: `TU-USUARIO.github.io`
-- TTL: `300`
+En **Workers & Pages → dezgre-status → Settings → Variables and Secrets** crea:
 
-Reemplaza `TU-USUARIO` por tu nombre real de GitHub.
+- `DOKPLOY_URL`: variable de texto con la URL base, por ejemplo
+  `https://dokploy.dezgre.com` (sin `/api/project.all`).
+- `DOKPLOY_API_KEY`: **Secret**, con la API key generada en Dokploy.
 
-## Enlaces configurados
+También se puede configurar con Wrangler:
 
-- https://dokploy.dezgre.com
-- https://n8n.dezgre.com
-- https://chatwoot.dezgre.com
-- https://evo.dezgre.com
-- https://api.dezgre.com
-- https://data.dezgre.com
-- https://ollama.dezgre.com
-
-## Métricas reales del VPS
-
-La interfaz ya está preparada para consumir una API externa.
-
-En `app.js`, cambia:
-
-```js
-statusApiUrl: ""
+```bash
+npx wrangler secret put DOKPLOY_API_KEY
 ```
 
-por:
+No pongas la clave en `app.js`, GitHub, `wrangler.toml` ni en una respuesta JSON.
+El navegador solo llama al Worker y es el Worker quien añade `x-api-key` a la
+petición privada hacia Dokploy.
+
+### 2. Código que hay que pegar
+
+Copia las funciones de `cloudflare/dokploy-services.js` dentro del módulo del
+Worker. Si se mantiene como archivo independiente, impórtala:
 
 ```js
-statusApiUrl: "https://status.dezgre.com/api/status"
+import { handleDokployServices } from "./dokploy-services.js";
 ```
 
-La API deberá devolver:
+En el `fetch(request, env)` **existente**, inmediatamente después de construir
+`url`, añade esta ruta y conserva intacta la implementación actual de
+`/api/status`:
 
-```json
-{
-  "server": {
-    "cpu": 6,
-    "memory": 19,
-    "diskUsed": 75,
-    "diskTotal": 400,
-    "diskPercent": 18.75
-  },
-  "history": {
-    "cpu": [5, 6, 8, 7],
-    "memory": [18, 19, 19, 20],
-    "disk": [18.5, 18.6, 18.7, 18.75]
-  }
+```js
+const url = new URL(request.url);
+
+if (url.pathname === "/api/services") {
+  return handleDokployServices(request, env);
 }
 ```
 
-Mientras esa API no exista, el panel seguirá funcionando y mostrará los accesos y el estado básico de los servicios.
+Después pulsa **Deploy**. El endpoint público debe responder con este contrato
+(nunca incluye la API key):
+
+```json
+{
+  "services": [
+    {
+      "id": "application-id",
+      "name": "n8n",
+      "description": "Aplicación administrada por Dokploy",
+      "type": "applications",
+      "url": "https://n8n.dezgre.com",
+      "online": true
+    }
+  ],
+  "checkedAt": "2026-08-02T12:00:00.000Z"
+}
+```
+
+### 3. Comprobación antes de publicar el panel
+
+```bash
+curl -i https://dezgre-status.nickbrya007.workers.dev/api/services
+```
+
+Comprueba que devuelve `200`, que las altas actuales aparecen, que no existe
+Ollama y que ni las cabeceras ni el cuerpo contienen `DOKPLOY_API_KEY`. Luego
+publica esta rama del panel en GitHub Pages.
+
+## Seguridad y CORS
+
+La ruta permite como origen `https://panel.dezgre.com`; cambia ese valor en el
+helper si el panel se publica en otro dominio. Los errores enviados al cliente
+son genéricos. El detalle se escribe únicamente en el log del Worker y la API
+key nunca se registra.
