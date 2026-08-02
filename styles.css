@@ -284,6 +284,19 @@ html[data-theme="light"] .moon { opacity: 1; transform: translateY(0); }
   transition: transform .2s ease, opacity .2s ease;
 }
 .open-btn:hover { transform: translateY(-1px); opacity: .9; }
+.open-btn.disabled {
+  color: var(--muted);
+  background: var(--surface-3);
+  cursor: default;
+}
+.empty-services {
+  margin: 0;
+  padding: 24px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 18px;
+  color: var(--muted);
+  text-align: center;
+}
 
 .status-dot {
   width: 8px;
