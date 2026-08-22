@@ -1,0 +1,32 @@
+name: Check Cloudflare access once
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/check-cloudflare-access-once.yml'
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      CF1: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF2: ${{ secrets.CF_API_TOKEN }}
+      ACCT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - shell: bash
+        run: |
+          set -euo pipefail
+          token=no
+          account=no
+          if [ -n "${CF1:-}" ] || [ -n "${CF2:-}" ]; then token=yes; fi
+          if [ -n "${ACCT:-}" ]; then account=yes; fi
+          printf 'token=%s\naccount=%s\n' "$token" "$account" > .cloudflare-access-result
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .cloudflare-access-result
+          git commit -m "Record Cloudflare access result"
+          git push
