@@ -14,7 +14,9 @@ import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -27,29 +29,46 @@ import org.json.JSONObject;
 import java.util.Locale;
 
 public final class MainActivity extends Activity {
-    private static final int BG = Color.rgb(246, 248, 251);
+    // Visual tokens mirrored from the responsive DEZGRE web panel.
+    private static final int BG = Color.rgb(247, 247, 247);
     private static final int SURFACE = Color.WHITE;
-    private static final int TEXT = Color.rgb(17, 24, 39);
-    private static final int MUTED = Color.rgb(107, 114, 128);
-    private static final int ACCENT = Color.rgb(15, 163, 127);
-    private static final int BORDER = Color.rgb(226, 232, 240);
-    private static final int DANGER = Color.rgb(190, 24, 93);
+    private static final int TEXT = Color.rgb(48, 55, 79);
+    private static final int MUTED = Color.rgb(139, 146, 162);
+    private static final int ACCENT = Color.rgb(177, 68, 178);
+    private static final int ACCENT_SOFT = Color.rgb(248, 237, 248);
+    private static final int SUCCESS = Color.rgb(0, 185, 87);
+    private static final int BORDER = Color.rgb(225, 228, 235);
+    private static final int DANGER = Color.rgb(180, 35, 24);
+    private static final int PANEL_DARK = Color.rgb(17, 17, 19);
+    private static final int PANEL_DARK_2 = Color.rgb(27, 27, 29);
+    private static final int PANEL_DARK_ACTIVE = Color.rgb(38, 38, 41);
 
     private ApiClient api;
     private SecureTokenStore tokenStore;
     private String bearer;
     private String currentScope = "bot";
+    private String currentTab = "home";
+    private String currentStoreName = "Tienda";
+    private String currentUserName = "Usuario";
+    private String currentUserRole = "";
+    private FrameLayout shell;
     private LinearLayout root;
     private LinearLayout body;
+    private LinearLayout drawer;
+    private View drawerBackdrop;
     private TextView titleView;
     private TextView subtitleView;
+    private TextView eyebrowView;
+    private TextView storeTopbarView;
+    private TextView userTopbarView;
+    private boolean drawerOpen = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Window window = getWindow();
-        window.setStatusBarColor(Color.rgb(11, 18, 32));
-        window.setNavigationBarColor(Color.rgb(11, 18, 32));
+        window.setStatusBarColor(PANEL_DARK);
+        window.setNavigationBarColor(PANEL_DARK);
         api = new ApiClient();
         tokenStore = new SecureTokenStore(this);
         bearer = tokenStore.load();
@@ -64,6 +83,15 @@ public final class MainActivity extends Activity {
     protected void onDestroy() {
         api.shutdown();
         super.onDestroy();
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (drawerOpen) {
+            closeDrawer();
+            return;
+        }
+        super.onBackPressed();
     }
 
     private int dp(int value) {
@@ -83,21 +111,28 @@ public final class MainActivity extends Activity {
         view.setText(value == null ? "" : value);
         view.setTextSize(sp);
         view.setTextColor(color);
-        view.setTypeface(Typeface.DEFAULT, bold ? Typeface.BOLD : Typeface.NORMAL);
+        view.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
         view.setLineSpacing(0, 1.12f);
+        return view;
+    }
+
+    private TextView eyebrow(String value) {
+        TextView view = text(value == null ? "" : value.toUpperCase(Locale.ROOT), 11, ACCENT, true);
+        view.setLetterSpacing(.16f);
         return view;
     }
 
     private Button button(String label, boolean primary) {
         Button button = new Button(this);
         button.setText(label);
-        button.setTextSize(15);
+        button.setTextSize(14);
         button.setAllCaps(false);
-        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
         button.setTextColor(primary ? Color.WHITE : TEXT);
-        button.setBackground(rounded(primary ? ACCENT : SURFACE, primary ? ACCENT : BORDER, 12));
-        button.setPadding(dp(16), dp(10), dp(16), dp(10));
-        button.setMinHeight(dp(48));
+        button.setBackground(rounded(primary ? ACCENT : SURFACE, primary ? ACCENT : BORDER, 10));
+        button.setPadding(dp(16), dp(9), dp(16), dp(9));
+        button.setMinHeight(dp(46));
+        button.setStateListAnimator(null);
         return button;
     }
 
@@ -111,8 +146,8 @@ public final class MainActivity extends Activity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(16), dp(16), dp(16), dp(16));
-        card.setBackground(rounded(SURFACE, BORDER, 16));
-        card.setElevation(dp(1));
+        card.setBackground(rounded(SURFACE, BORDER, 12));
+        card.setElevation(0);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -122,12 +157,37 @@ public final class MainActivity extends Activity {
         return card;
     }
 
+    private void applyIdentity(JSONObject payload) {
+        if (payload == null) return;
+        JSONObject user = payload.optJSONObject("user");
+        JSONObject store = payload.optJSONObject("store");
+        if (user != null) {
+            String name = user.optString("name", "").trim();
+            if (!name.isEmpty()) currentUserName = name;
+        }
+        if (store != null) {
+            String name = store.optString("name", "").trim();
+            if (!name.isEmpty()) currentStoreName = name;
+            String role = store.optString("role", "").trim();
+            if (!role.isEmpty()) currentUserRole = role;
+        }
+        updateChromeIdentity();
+    }
+
+    private void updateChromeIdentity() {
+        if (storeTopbarView != null) storeTopbarView.setText(currentStoreName);
+        if (userTopbarView != null) userTopbarView.setText(currentUserName);
+    }
+
     private void validateSession() {
         setContentView(loadingScreen("Validando sesión segura…"));
         api.get("/me", bearer, new ApiClient.Callback() {
-            @Override public void onSuccess(JSONObject json) {
+            @Override public void onSuccess(final JSONObject json) {
                 runOnUiThread(new Runnable() {
-                    @Override public void run() { showMain("home"); }
+                    @Override public void run() {
+                        applyIdentity(json);
+                        showMain("home");
+                    }
                 });
             }
             @Override public void onError(final ApiClient.ApiException error) {
