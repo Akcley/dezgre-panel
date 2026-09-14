@@ -91,6 +91,8 @@
         if ("products".equals(tab)) loadProducts();
         else if ("profile".equals(tab)) loadProfile();
         else if ("home".equals(tab)) loadHome();
+        else if ("panel".equals(tab)) loadDashboard();
+        else if ("orders".equals(tab)) loadOrders();
         else showUnavailableSection(tab);
     }
 
