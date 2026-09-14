@@ -1,78 +1,114 @@
-        subtitleView.setText("Identidad y accesos V1");
-        body.addView(loadingInline("Cargando perfil…"));
-        api.get("/me", bearer, new ApiClient.Callback() {
-            @Override public void onSuccess(final JSONObject me) {
-                api.get("/stores", bearer, new ApiClient.Callback() {
-                    @Override public void onSuccess(final JSONObject stores) {
-                        runOnUiThread(new Runnable() {
-                            @Override public void run() { renderProfile(me, stores.optJSONArray("stores")); }
-                        });
-                    }
-                    @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudieron cargar tus tiendas."); }
-                });
-            }
-            @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudo cargar el perfil."); }
-        });
-    }
 
     private void renderProfile(JSONObject me, JSONArray stores) {
         body.removeAllViews();
         JSONObject user = me.optJSONObject("user");
         JSONObject current = me.optJSONObject("store");
+
         LinearLayout userCard = card();
-        userCard.addView(text(user == null ? "Usuario" : user.optString("name", "Usuario"), 23, TEXT, true));
-        userCard.addView(gap(5));
-        userCard.addView(text(user == null ? "" : user.optString("email", ""), 14, MUTED, false));
-        userCard.addView(gap(9));
-        userCard.addView(text(current == null ? "" : current.optString("role", ""), 13, ACCENT, true));
+        LinearLayout userRow = new LinearLayout(this);
+        userRow.setOrientation(LinearLayout.HORIZONTAL);
+        userRow.setGravity(Gravity.CENTER_VERTICAL);
+        String userName = user == null ? currentUserName : user.optString("name", currentUserName);
+        TextView avatar = text(safeInitial(userName), 20, Color.WHITE, true);
+        avatar.setGravity(Gravity.CENTER);
+        avatar.setBackground(rounded(Color.rgb(75, 77, 84), Color.TRANSPARENT, 100));
+        userRow.addView(avatar, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        LinearLayout userCopy = new LinearLayout(this);
+        userCopy.setOrientation(LinearLayout.VERTICAL);
+        userCopy.setPadding(dp(12), 0, 0, 0);
+        userCopy.addView(text(userName, 20, TEXT, true));
+        userCopy.addView(gap(3));
+        userCopy.addView(text(user == null ? "" : user.optString("email", ""), 12, MUTED, false));
+        String role = current == null ? currentUserRole : current.optString("role", currentUserRole);
+        if (!role.isEmpty()) {
+            userCopy.addView(gap(5));
+            userCopy.addView(text(role, 11, ACCENT, true));
+        }
+        userRow.addView(userCopy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        userCard.addView(userRow);
         body.addView(userCard);
 
         LinearLayout accessCard = card();
-        accessCard.addView(text("Tiendas con acceso", 15, TEXT, true));
+        accessCard.addView(eyebrow("TIENDAS CON ACCESO"));
         accessCard.addView(gap(10));
         if (stores != null) {
             for (int i = 0; i < stores.length(); i++) {
                 JSONObject store = stores.optJSONObject(i);
                 if (store == null) continue;
-                String prefix = store.optBoolean("selected", false) ? "● " : "○ ";
-                TextView line = text(prefix + store.optString("name", "Tienda") + " · " + store.optString("role", ""), 14,
-                        store.optBoolean("selected", false) ? ACCENT : TEXT, store.optBoolean("selected", false));
+                boolean selected = store.optBoolean("selected", false);
+                LinearLayout line = new LinearLayout(this);
+                line.setOrientation(LinearLayout.HORIZONTAL);
+                line.setGravity(Gravity.CENTER_VERTICAL);
+                TextView dot = text(selected ? "●" : "○", 15, selected ? ACCENT : MUTED, true);
+                line.addView(dot, new LinearLayout.LayoutParams(dp(24), ViewGroup.LayoutParams.WRAP_CONTENT));
+                LinearLayout storeCopy = new LinearLayout(this);
+                storeCopy.setOrientation(LinearLayout.VERTICAL);
+                storeCopy.addView(text(store.optString("name", "Tienda"), 14, selected ? TEXT : Color.rgb(80, 88, 111), selected));
+                storeCopy.addView(gap(2));
+                storeCopy.addView(text(store.optString("role", ""), 10, MUTED, false));
+                line.addView(storeCopy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                if (selected) {
+                    TextView active = text("ACTUAL", 9, ACCENT, true);
+                    active.setPadding(dp(7), dp(4), dp(7), dp(4));
+                    active.setBackground(rounded(ACCENT_SOFT, Color.TRANSPARENT, 100));
+                    line.addView(active);
+                }
                 accessCard.addView(line);
-                if (i < stores.length() - 1) accessCard.addView(gap(8));
+                if (i < stores.length() - 1) {
+                    accessCard.addView(gap(10));
+                    View divider = new View(this);
+                    divider.setBackgroundColor(BORDER);
+                    accessCard.addView(divider, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
+                    accessCard.addView(gap(10));
+                }
             }
         }
         body.addView(accessCard);
 
         final String notificationStoreId = current == null ? "current" : current.optString("id", "current");
         LinearLayout notificationCard = card();
-        TextView notificationTitle = text("Notificaciones", 17, TEXT, true);
-        notificationTitle.setTextColor(Color.rgb(177, 68, 178));
-        notificationCard.addView(notificationTitle);
+        notificationCard.addView(eyebrow("NOTIFICACIONES"));
         notificationCard.addView(gap(7));
-        notificationCard.addView(text("Motor Android listo · configuración separada por tienda y tipo de evento.", 14, TEXT, false));
-        notificationCard.addView(gap(7));
-        notificationCard.addView(text("Permiso Android: " + DezgreNotificationManager.permissionLabel(this), 13,
-                DezgreNotificationManager.hasPermission(this) ? ACCENT : MUTED, true));
-        notificationCard.addView(gap(4));
-        notificationCard.addView(text("Sonidos personalizados: preparados para sincronizar enabled, MP3 y revisión desde API V1 sin recompilar la app.", 12, MUTED, false));
+        notificationCard.addView(text("Avisos personalizados por tienda", 18, TEXT, true));
+        notificationCard.addView(gap(5));
+        notificationCard.addView(text("La app está preparada para respetar cada evento y el sonido elegido por el administrador en DEZGRE Web.", 12, MUTED, false));
+        notificationCard.addView(gap(14));
+
+        LinearLayout notifRow = new LinearLayout(this);
+        notifRow.setOrientation(LinearLayout.HORIZONTAL);
+        notifRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView bell = text("◉", 18, ACCENT, true);
+        bell.setGravity(Gravity.CENTER);
+        bell.setBackground(rounded(ACCENT_SOFT, Color.TRANSPARENT, 10));
+        notifRow.addView(bell, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        LinearLayout notifCopy = new LinearLayout(this);
+        notifCopy.setOrientation(LinearLayout.VERTICAL);
+        notifCopy.setPadding(dp(11), 0, 0, 0);
+        notifCopy.addView(text("Motor Android", 13, TEXT, true));
+        notifCopy.addView(gap(2));
+        notifCopy.addView(text("Permiso: " + DezgreNotificationManager.permissionLabel(this), 11,
+                DezgreNotificationManager.hasPermission(this) ? SUCCESS : MUTED, false));
+        notifRow.addView(notifCopy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        notificationCard.addView(notifRow);
         notificationCard.addView(gap(12));
+
         final TextView notificationStatus = text(
-                "La prueba local valida Android. El push remoto se activará cuando V1 entregue registro de dispositivo + configuración de eventos.",
-                12, MUTED, false);
+                "Prueba el aviso con sonido del sistema. Los MP3 personalizados se conectarán por event_key + sound_revision cuando Bubble V1 exponga esa configuración.",
+                11, MUTED, false);
         notificationCard.addView(notificationStatus);
         notificationCard.addView(gap(10));
         Button testNotification = button(
-                DezgreNotificationManager.hasPermission(this) ? "Probar notificación" : "Activar notificaciones",
+                DezgreNotificationManager.hasPermission(this) ? "Probar sonido y notificación" : "Activar notificaciones",
                 false
         );
         testNotification.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 boolean shown = DezgreNotificationManager.showTest(MainActivity.this, notificationStoreId);
                 if (shown) {
-                    notificationStatus.setText("Prueba enviada. Si apareció fuera de la app, el motor Android está funcionando.");
-                    notificationStatus.setTextColor(ACCENT);
+                    notificationStatus.setText("Prueba enviada con un canal nuevo de sonido. Si el volumen de notificaciones del teléfono está activo, debe sonar y vibrar.");
+                    notificationStatus.setTextColor(SUCCESS);
                 } else {
-                    notificationStatus.setText("Android solicitó permiso. Acéptalo y vuelve a tocar Probar notificación.");
+                    notificationStatus.setText("Android solicitó permiso. Acéptalo y vuelve a tocar Probar sonido y notificación.");
                     notificationStatus.setTextColor(MUTED);
                 }
             }
@@ -90,8 +126,10 @@
             }
         });
         body.addView(logout);
-        body.addView(gap(10));
-        body.addView(text("DEZGRE Mobile 0.1.0 · API https://api.dezgre.com/v1", 11, MUTED, false));
+        body.addView(gap(12));
+        TextView version = text("DEZGRE Mobile · API Bubble V1", 10, MUTED, false);
+        version.setGravity(Gravity.CENTER);
+        body.addView(version);
     }
 
     private void handlePrivateError(final ApiClient.ApiException error, final String fallback) {
@@ -112,7 +150,7 @@
                     body.addView(errorCard);
                     Button retry = button("Reintentar", true);
                     retry.setOnClickListener(new View.OnClickListener() {
-                        @Override public void onClick(View v) { showMain("home"); }
+                        @Override public void onClick(View v) { showMain(currentTab); }
                     });
                     body.addView(retry);
                 }
