@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - mobile-app-v1
+      - mobile-app-v1-build
     paths-ignore:
       - 'dist/**'
 
@@ -72,5 +72,5 @@ jobs:
           git add -f dist/DEZGRE-Mobile-v0.1.0.apk dist/DEZGRE-Mobile-v0.1.0.apk.sha256
           if ! git diff --cached --quiet; then
             git commit -m "build: publish DEZGRE Mobile v0.1.0 APK [skip ci]"
-            git push origin HEAD:mobile-app-v1
+            git push origin HEAD:mobile-app-v1-build
           fi
