@@ -1,0 +1,60 @@
+name: Temporary integrate Mobile v0.1.4
+
+on:
+  push:
+    branches:
+      - mobile-app-v1-build
+    paths:
+      - '.github/workflows/tmp-integrate-v014.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: mobile-app-v1-build
+          fetch-depth: 0
+      - name: Apply scoped routing and version patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          main = Path('app/src/main/java/com/dezgre/mobile/MainActivity.java.part04')
+          text = main.read_text(encoding='utf-8')
+          old = '''        if ("products".equals(tab)) loadProducts();
+                  else if ("profile".equals(tab)) loadProfile();
+                  else if ("home".equals(tab)) loadHome();
+                  else showUnavailableSection(tab);'''
+          new = '''        if ("products".equals(tab)) loadProducts();
+                  else if ("profile".equals(tab)) loadProfile();
+                  else if ("home".equals(tab)) loadHome();
+                  else if ("panel".equals(tab)) loadDashboard();
+                  else if ("orders".equals(tab)) loadOrders();
+                  else showUnavailableSection(tab);'''
+          if old not in text:
+              raise SystemExit('Expected showMain routing block not found; refusing broad rewrite.')
+          main.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          workflow = Path('.github/workflows/build-dezgre-mobile-apk.yml')
+          build = workflow.read_text(encoding='utf-8')
+          build = build.replace('DEZGRE_VERSION_NAME: 0.1.3', 'DEZGRE_VERSION_NAME: 0.1.4')
+          build = build.replace('DEZGRE-Mobile-v0.1.3', 'DEZGRE-Mobile-v0.1.4')
+          build = build.replace('DEZGRE Mobile v0.1.3', 'DEZGRE Mobile v0.1.4')
+          workflow.write_text(build, encoding='utf-8')
+
+          Path('.github/workflows/tmp-integrate-v014.yml').unlink()
+      - name: Commit isolated mobile patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+Akcley@users.noreply.github.com"
+          git add app/src/main/java/com/dezgre/mobile/MainActivity.java.part04 \
+                  .github/workflows/build-dezgre-mobile-apk.yml \
+                  .github/workflows/tmp-integrate-v014.yml
+          git commit -m "feat(mobile): wire dashboard and orders API V1"
+          git push origin HEAD:mobile-app-v1-build
