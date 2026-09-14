@@ -94,9 +94,9 @@
     }
 
     private void loadProfile() {
-        setPageHeading("CUENTA", "Perfil", "Identidad, tiendas y preferencias del dispositivo.");
+        setPageHeading("MI CUENTA", "Ajustes de cuenta", "Tu perfil, acceso, tiendas y notificaciones.");
         body.removeAllViews();
-        body.addView(loadingInline("Cargando perfil…"));
+        body.addView(loadingInline("Cargando tu cuenta…"));
         api.get("/me", bearer, new ApiClient.Callback() {
             @Override public void onSuccess(final JSONObject me) {
                 api.get("/stores", bearer, new ApiClient.Callback() {
@@ -111,6 +111,6 @@
                     @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudieron cargar tus tiendas."); }
                 });
             }
-            @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudo cargar el perfil."); }
+            @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudo cargar tu cuenta."); }
         });
     }
