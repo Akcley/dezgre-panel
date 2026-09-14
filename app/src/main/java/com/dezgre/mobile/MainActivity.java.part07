@@ -1,37 +1,112 @@
 
+    private TextView profileField(String value, boolean mutedValue) {
+        TextView field = text(value == null ? "" : value, 13, mutedValue ? MUTED : TEXT, !mutedValue);
+        field.setGravity(Gravity.CENTER_VERTICAL);
+        field.setPadding(dp(13), 0, dp(13), 0);
+        field.setBackground(rounded(Color.rgb(252, 252, 253), BORDER, 9));
+        field.setSingleLine(true);
+        field.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        return field;
+    }
+
+    private void addProfileField(LinearLayout parent, String label, String value, boolean mutedValue) {
+        parent.addView(text(label, 11, TEXT, true));
+        parent.addView(gap(6));
+        parent.addView(profileField(value, mutedValue), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+        parent.addView(gap(12));
+    }
+
+    private String selectedStoreDomain(JSONObject current, JSONArray stores) {
+        if (current != null) {
+            String domain = current.optString("domain", "").trim();
+            if (!domain.isEmpty() && !"null".equals(domain)) return domain;
+        }
+        if (stores != null) {
+            for (int i = 0; i < stores.length(); i++) {
+                JSONObject store = stores.optJSONObject(i);
+                if (store == null || !store.optBoolean("selected", false)) continue;
+                String domain = store.optString("domain", "").trim();
+                if (!domain.isEmpty() && !"null".equals(domain)) return domain;
+            }
+        }
+        return "";
+    }
+
     private void renderProfile(JSONObject me, JSONArray stores) {
         body.removeAllViews();
         JSONObject user = me.optJSONObject("user");
         JSONObject current = me.optJSONObject("store");
+        final String userName = user == null ? currentUserName : user.optString("name", currentUserName);
+        final String email = user == null ? "" : user.optString("email", "");
+        final String role = current == null ? currentUserRole : current.optString("role", currentUserRole);
+        final String webDomain = selectedStoreDomain(current, stores);
 
-        LinearLayout userCard = card();
-        LinearLayout userRow = new LinearLayout(this);
-        userRow.setOrientation(LinearLayout.HORIZONTAL);
-        userRow.setGravity(Gravity.CENTER_VERTICAL);
-        String userName = user == null ? currentUserName : user.optString("name", currentUserName);
+        LinearLayout accountCard = card();
+        LinearLayout avatarBlock = new LinearLayout(this);
+        avatarBlock.setOrientation(LinearLayout.HORIZONTAL);
+        avatarBlock.setGravity(Gravity.CENTER_VERTICAL);
+        avatarBlock.setPadding(dp(14), dp(14), dp(14), dp(14));
+        avatarBlock.setBackground(rounded(Color.WHITE, BORDER, 12));
+
         TextView avatar = text(safeInitial(userName), 20, Color.WHITE, true);
         avatar.setGravity(Gravity.CENTER);
         avatar.setBackground(rounded(Color.rgb(75, 77, 84), Color.TRANSPARENT, 100));
-        userRow.addView(avatar, new LinearLayout.LayoutParams(dp(54), dp(54)));
-        LinearLayout userCopy = new LinearLayout(this);
-        userCopy.setOrientation(LinearLayout.VERTICAL);
-        userCopy.setPadding(dp(12), 0, 0, 0);
-        userCopy.addView(text(userName, 20, TEXT, true));
-        userCopy.addView(gap(3));
-        userCopy.addView(text(user == null ? "" : user.optString("email", ""), 12, MUTED, false));
-        String role = current == null ? currentUserRole : current.optString("role", currentUserRole);
+        avatarBlock.addView(avatar, new LinearLayout.LayoutParams(dp(64), dp(64)));
+
+        LinearLayout avatarCopy = new LinearLayout(this);
+        avatarCopy.setOrientation(LinearLayout.VERTICAL);
+        avatarCopy.setPadding(dp(14), 0, 0, 0);
+        avatarCopy.addView(text("Foto de perfil", 13, TEXT, true));
+        avatarCopy.addView(gap(4));
+        avatarCopy.addView(text("Tu identidad de DEZGRE para esta tienda.", 11, MUTED, false));
         if (!role.isEmpty()) {
-            userCopy.addView(gap(5));
-            userCopy.addView(text(role, 11, ACCENT, true));
+            avatarCopy.addView(gap(7));
+            TextView roleBadge = text(role, 10, ACCENT, true);
+            roleBadge.setPadding(dp(8), dp(4), dp(8), dp(4));
+            roleBadge.setBackground(rounded(ACCENT_SOFT, Color.TRANSPARENT, 100));
+            avatarCopy.addView(roleBadge, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
-        userRow.addView(userCopy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        userCard.addView(userRow);
-        body.addView(userCard);
+        avatarBlock.addView(avatarCopy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        accountCard.addView(avatarBlock);
+        accountCard.addView(gap(18));
+
+        addProfileField(accountCard, "Nombre", userName, false);
+        addProfileField(accountCard, "Email", email, false);
+
+        View divider = new View(this);
+        divider.setBackgroundColor(BORDER);
+        accountCard.addView(divider, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
+        accountCard.addView(gap(16));
+        accountCard.addView(text("Cambiar contraseña", 19, TEXT, false));
+        accountCard.addView(gap(5));
+        accountCard.addView(text("La edición segura de credenciales se realiza desde los ajustes completos de la cuenta.", 12, MUTED, false));
+        accountCard.addView(gap(14));
+        addProfileField(accountCard, "Contraseña actual", "Gestionar desde Ajustes de cuenta", true);
+        addProfileField(accountCard, "Nueva contraseña", "Gestionar desde Ajustes de cuenta", true);
+        addProfileField(accountCard, "Confirmar contraseña", "Gestionar desde Ajustes de cuenta", true);
+
+        Button manageAccount = button("Editar foto, nombre o contraseña", true);
+        manageAccount.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                if (webDomain.isEmpty()) {
+                    android.widget.Toast.makeText(MainActivity.this, "La tienda no devolvió todavía su dominio web.", android.widget.Toast.LENGTH_LONG).show();
+                    return;
+                }
+                String url = webDomain.startsWith("http://") || webDomain.startsWith("https://")
+                        ? webDomain
+                        : "https://" + webDomain;
+                android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse(url + "/panel/cuenta"));
+                startActivity(intent);
+            }
+        });
+        accountCard.addView(manageAccount, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
+        body.addView(accountCard);
 
         LinearLayout accessCard = card();
         accessCard.addView(eyebrow("TIENDAS CON ACCESO"));
-        accessCard.addView(gap(10));
-        if (stores != null) {
+        accessCard.addView(gap(11));
+        if (stores != null && stores.length() > 0) {
             for (int i = 0; i < stores.length(); i++) {
                 JSONObject store = stores.optJSONObject(i);
                 if (store == null) continue;
@@ -39,29 +114,31 @@
                 LinearLayout line = new LinearLayout(this);
                 line.setOrientation(LinearLayout.HORIZONTAL);
                 line.setGravity(Gravity.CENTER_VERTICAL);
-                TextView dot = text(selected ? "●" : "○", 15, selected ? ACCENT : MUTED, true);
+                TextView dot = text("●", 12, selected ? ACCENT : Color.rgb(205, 208, 216), true);
                 line.addView(dot, new LinearLayout.LayoutParams(dp(24), ViewGroup.LayoutParams.WRAP_CONTENT));
                 LinearLayout storeCopy = new LinearLayout(this);
                 storeCopy.setOrientation(LinearLayout.VERTICAL);
-                storeCopy.addView(text(store.optString("name", "Tienda"), 14, selected ? TEXT : Color.rgb(80, 88, 111), selected));
+                storeCopy.addView(text(store.optString("name", "Tienda"), 14, TEXT, true));
                 storeCopy.addView(gap(2));
                 storeCopy.addView(text(store.optString("role", ""), 10, MUTED, false));
                 line.addView(storeCopy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
                 if (selected) {
                     TextView active = text("ACTUAL", 9, ACCENT, true);
-                    active.setPadding(dp(7), dp(4), dp(7), dp(4));
+                    active.setPadding(dp(8), dp(4), dp(8), dp(4));
                     active.setBackground(rounded(ACCENT_SOFT, Color.TRANSPARENT, 100));
                     line.addView(active);
                 }
                 accessCard.addView(line);
                 if (i < stores.length() - 1) {
                     accessCard.addView(gap(10));
-                    View divider = new View(this);
-                    divider.setBackgroundColor(BORDER);
-                    accessCard.addView(divider, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
+                    View rowDivider = new View(this);
+                    rowDivider.setBackgroundColor(BORDER);
+                    accessCard.addView(rowDivider, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)));
                     accessCard.addView(gap(10));
                 }
             }
+        } else {
+            accessCard.addView(text(currentStoreName, 14, TEXT, true));
         }
         body.addView(accessCard);
 
@@ -69,22 +146,22 @@
         LinearLayout notificationCard = card();
         notificationCard.addView(eyebrow("NOTIFICACIONES"));
         notificationCard.addView(gap(7));
-        notificationCard.addView(text("Avisos personalizados por tienda", 18, TEXT, true));
+        notificationCard.addView(text("Avisos de DEZGRE", 18, TEXT, true));
         notificationCard.addView(gap(5));
-        notificationCard.addView(text("La app está preparada para respetar cada evento y el sonido elegido por el administrador en DEZGRE Web.", 12, MUTED, false));
+        notificationCard.addView(text("Controla el permiso de Android y prueba el sonido de las notificaciones en este teléfono.", 12, MUTED, false));
         notificationCard.addView(gap(14));
 
         LinearLayout notifRow = new LinearLayout(this);
         notifRow.setOrientation(LinearLayout.HORIZONTAL);
         notifRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView bell = text("◉", 18, ACCENT, true);
+        TextView bell = text("●", 16, ACCENT, true);
         bell.setGravity(Gravity.CENTER);
         bell.setBackground(rounded(ACCENT_SOFT, Color.TRANSPARENT, 10));
         notifRow.addView(bell, new LinearLayout.LayoutParams(dp(42), dp(42)));
         LinearLayout notifCopy = new LinearLayout(this);
         notifCopy.setOrientation(LinearLayout.VERTICAL);
         notifCopy.setPadding(dp(11), 0, 0, 0);
-        notifCopy.addView(text("Motor Android", 13, TEXT, true));
+        notifCopy.addView(text("Notificaciones del dispositivo", 13, TEXT, true));
         notifCopy.addView(gap(2));
         notifCopy.addView(text("Permiso: " + DezgreNotificationManager.permissionLabel(this), 11,
                 DezgreNotificationManager.hasPermission(this) ? SUCCESS : MUTED, false));
@@ -93,7 +170,7 @@
         notificationCard.addView(gap(12));
 
         final TextView notificationStatus = text(
-                "Prueba el aviso con sonido del sistema. Los MP3 personalizados se conectarán por event_key + sound_revision cuando Bubble V1 exponga esa configuración.",
+                "Usa esta prueba para comprobar que Android reproduce sonido y vibración.",
                 11, MUTED, false);
         notificationCard.addView(notificationStatus);
         notificationCard.addView(gap(10));
@@ -105,10 +182,10 @@
             @Override public void onClick(View v) {
                 boolean shown = DezgreNotificationManager.showTest(MainActivity.this, notificationStoreId);
                 if (shown) {
-                    notificationStatus.setText("Prueba enviada con un canal nuevo de sonido. Si el volumen de notificaciones del teléfono está activo, debe sonar y vibrar.");
+                    notificationStatus.setText("Prueba enviada. Debe escucharse y vibrar si el teléfono tiene activo el volumen de notificaciones.");
                     notificationStatus.setTextColor(SUCCESS);
                 } else {
-                    notificationStatus.setText("Android solicitó permiso. Acéptalo y vuelve a tocar Probar sonido y notificación.");
+                    notificationStatus.setText("Android solicitó permiso. Acéptalo y vuelve a tocar la prueba.");
                     notificationStatus.setTextColor(MUTED);
                 }
             }
@@ -116,6 +193,7 @@
         notificationCard.addView(testNotification);
         body.addView(notificationCard);
 
+        LinearLayout sessionCard = card();
         Button logout = button("Cerrar sesión en este dispositivo", false);
         logout.setTextColor(DANGER);
         logout.setOnClickListener(new View.OnClickListener() {
@@ -125,9 +203,18 @@
                 showLogin(null);
             }
         });
-        body.addView(logout);
-        body.addView(gap(12));
-        TextView version = text("DEZGRE Mobile · API Bubble V1", 10, MUTED, false);
+        sessionCard.addView(logout, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
+        body.addView(sessionCard);
+        body.addView(gap(8));
+
+        String versionName = BuildConfig.VERSION_NAME;
+        long versionCode;
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            versionCode = getPackageManager().getPackageInfo(getPackageName(), 0).getLongVersionCode();
+        } else {
+            versionCode = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
+        }
+        TextView version = text("DEZGRE Mobile " + versionName + " · build " + versionCode, 10, MUTED, false);
         version.setGravity(Gravity.CENTER);
         body.addView(version);
     }
