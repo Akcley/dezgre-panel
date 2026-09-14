@@ -23,57 +23,211 @@
     }
 
     private void showMain(String tab) {
+        currentTab = tab;
+        drawerOpen = false;
+        shell = new FrameLayout(this);
+        shell.setBackgroundColor(BG);
+
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BG);
+        shell.addView(root, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
 
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.VERTICAL);
-        header.setPadding(dp(20), dp(18), dp(20), dp(14));
-        header.setBackgroundColor(Color.rgb(11, 18, 32));
-        titleView = text("DEZGRE", 23, Color.WHITE, true);
-        subtitleView = text("Mobile · Bubble API V1", 12, Color.rgb(148, 163, 184), false);
-        header.addView(titleView);
-        header.addView(subtitleView);
-        root.addView(header);
+        LinearLayout topbar = new LinearLayout(this);
+        topbar.setOrientation(LinearLayout.HORIZONTAL);
+        topbar.setGravity(Gravity.CENTER_VERTICAL);
+        topbar.setPadding(dp(6), 0, dp(14), 0);
+        topbar.setBackgroundColor(PANEL_DARK);
+
+        TextView menu = text("☰", 24, Color.WHITE, false);
+        menu.setGravity(Gravity.CENTER);
+        menu.setClickable(true);
+        menu.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { openDrawer(); }
+        });
+        topbar.addView(menu, new LinearLayout.LayoutParams(dp(52), dp(58)));
+
+        storeTopbarView = text(currentStoreName, 14, Color.WHITE, true);
+        storeTopbarView.setSingleLine(true);
+        topbar.addView(storeTopbarView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        userTopbarView = text(currentUserName, 11, Color.rgb(183, 183, 189), false);
+        userTopbarView.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        userTopbarView.setSingleLine(true);
+        topbar.addView(userTopbarView, new LinearLayout.LayoutParams(dp(112), ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(topbar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(58)));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        scroll.setBackgroundColor(BG);
+        LinearLayout pageWrap = new LinearLayout(this);
+        pageWrap.setOrientation(LinearLayout.VERTICAL);
+        pageWrap.setPadding(dp(20), dp(22), dp(20), dp(28));
+        scroll.addView(pageWrap);
+
+        eyebrowView = eyebrow("DEZGRE");
+        pageWrap.addView(eyebrowView);
+        pageWrap.addView(gap(6));
+        titleView = text("", 31, TEXT, false);
+        titleView.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+        pageWrap.addView(titleView);
+        pageWrap.addView(gap(5));
+        subtitleView = text("", 13, TEXT, false);
+        pageWrap.addView(subtitleView);
+        pageWrap.addView(gap(22));
+
         body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(18), dp(18), dp(18), dp(22));
-        scroll.addView(body);
-        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
-        root.addView(scroll, scrollParams);
+        pageWrap.addView(body, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        LinearLayout nav = new LinearLayout(this);
-        nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setPadding(dp(8), dp(7), dp(8), dp(7));
-        nav.setBackgroundColor(SURFACE);
-        root.addView(nav, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)));
-        addNavButton(nav, "Inicio", "home", tab);
-        addNavButton(nav, "Productos", "products", tab);
-        addNavButton(nav, "Perfil", "profile", tab);
-        setContentView(root);
+        buildDrawer();
+        setContentView(shell);
+        updateChromeIdentity();
 
         if ("products".equals(tab)) loadProducts();
         else if ("profile".equals(tab)) loadProfile();
         else loadHome();
     }
 
-    private void addNavButton(LinearLayout nav, String label, final String tab, String selected) {
-        Button b = button(label, tab.equals(selected));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f);
-        params.setMargins(dp(4), 0, dp(4), 0);
-        nav.addView(b, params);
-        b.setOnClickListener(new View.OnClickListener() {
+    private void setPageHeading(String eyebrow, String title, String subtitle) {
+        if (eyebrowView != null) eyebrowView.setText((eyebrow == null ? "" : eyebrow).toUpperCase(Locale.ROOT));
+        if (titleView != null) titleView.setText(title == null ? "" : title);
+        if (subtitleView != null) subtitleView.setText(subtitle == null ? "" : subtitle);
+    }
+
+    private void buildDrawer() {
+        drawerBackdrop = new View(this);
+        drawerBackdrop.setBackgroundColor(Color.argb(150, 0, 0, 0));
+        drawerBackdrop.setVisibility(View.GONE);
+        drawerBackdrop.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { closeDrawer(); }
+        });
+        shell.addView(drawerBackdrop, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        drawer = new LinearLayout(this);
+        drawer.setOrientation(LinearLayout.VERTICAL);
+        drawer.setPadding(dp(8), dp(10), dp(8), dp(12));
+        drawer.setBackgroundColor(PANEL_DARK);
+        drawer.setVisibility(View.GONE);
+        int maxWidth = Math.max(dp(240), getResources().getDisplayMetrics().widthPixels - dp(52));
+        int drawerWidth = Math.min(dp(300), maxWidth);
+        FrameLayout.LayoutParams drawerParams = new FrameLayout.LayoutParams(drawerWidth, ViewGroup.LayoutParams.MATCH_PARENT);
+        drawerParams.gravity = Gravity.START;
+        shell.addView(drawer, drawerParams);
+
+        LinearLayout brandRow = new LinearLayout(this);
+        brandRow.setOrientation(LinearLayout.HORIZONTAL);
+        brandRow.setGravity(Gravity.CENTER_VERTICAL);
+        brandRow.setPadding(dp(8), dp(4), dp(4), dp(10));
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.ic_launcher);
+        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        brandRow.addView(logo, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        LinearLayout brandCopy = new LinearLayout(this);
+        brandCopy.setOrientation(LinearLayout.VERTICAL);
+        brandCopy.setPadding(dp(10), 0, 0, 0);
+        brandCopy.addView(text(currentStoreName, 14, Color.WHITE, true));
+        brandCopy.addView(text("DEZGRE Mobile", 10, Color.rgb(167, 167, 175), false));
+        brandRow.addView(brandCopy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView close = text("×", 29, Color.rgb(215, 215, 220), false);
+        close.setGravity(Gravity.CENTER);
+        close.setClickable(true);
+        close.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { closeDrawer(); }
+        });
+        brandRow.addView(close, new LinearLayout.LayoutParams(dp(40), dp(44)));
+        drawer.addView(brandRow);
+
+        drawer.addView(drawerItem("⌂", "Inicio", "home", "home".equals(currentTab)));
+        drawer.addView(drawerItem("▦", "Productos", "products", "products".equals(currentTab)));
+        drawer.addView(drawerItem("◉", "Perfil", "profile", "profile".equals(currentTab)));
+
+        View spacer = new View(this);
+        drawer.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
+
+        LinearLayout account = new LinearLayout(this);
+        account.setOrientation(LinearLayout.HORIZONTAL);
+        account.setGravity(Gravity.CENTER_VERTICAL);
+        account.setPadding(dp(11), dp(10), dp(11), dp(10));
+        account.setBackground(rounded(PANEL_DARK_2, Color.rgb(56, 56, 61), 12));
+        TextView avatar = text(safeInitial(currentUserName), 14, Color.WHITE, true);
+        avatar.setGravity(Gravity.CENTER);
+        avatar.setBackground(rounded(Color.rgb(75, 77, 84), Color.rgb(91, 93, 101), 100));
+        account.addView(avatar, new LinearLayout.LayoutParams(dp(34), dp(34)));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(9), 0, 0, 0);
+        copy.addView(text(currentUserName, 12, Color.WHITE, true));
+        copy.addView(text(currentUserRole.isEmpty() ? "Cuenta DEZGRE" : currentUserRole, 10, Color.rgb(167, 167, 175), false));
+        account.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        account.setClickable(true);
+        account.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { closeDrawer(); showMain("profile"); }
+        });
+        LinearLayout.LayoutParams accountParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        accountParams.setMargins(dp(8), dp(8), dp(8), dp(4));
+        drawer.addView(account, accountParams);
+        TextView apiLabel = text("API Bubble V1 · solo endpoints certificados", 9, Color.rgb(125, 125, 132), false);
+        apiLabel.setGravity(Gravity.CENTER);
+        drawer.addView(apiLabel);
+    }
+
+    private TextView drawerItem(String icon, String label, final String tab, boolean active) {
+        TextView item = text(icon + "   " + label, 14, active ? Color.WHITE : Color.rgb(215, 215, 220), active);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(dp(14), dp(11), dp(14), dp(11));
+        item.setBackground(rounded(active ? PANEL_DARK_ACTIVE : Color.TRANSPARENT, Color.TRANSPARENT, 9));
+        item.setClickable(true);
+        item.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { closeDrawer(); showMain(tab); }
+        });
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
+        params.setMargins(dp(8), dp(2), dp(8), dp(2));
+        item.setLayoutParams(params);
+        return item;
+    }
+
+    private void openDrawer() {
+        if (drawer == null || drawerBackdrop == null) return;
+        drawerOpen = true;
+        drawerBackdrop.setVisibility(View.VISIBLE);
+        drawer.setVisibility(View.VISIBLE);
+        drawer.bringToFront();
+    }
+
+    private void closeDrawer() {
+        drawerOpen = false;
+        if (drawer != null) drawer.setVisibility(View.GONE);
+        if (drawerBackdrop != null) drawerBackdrop.setVisibility(View.GONE);
+    }
+
+    private String safeInitial(String value) {
+        String clean = value == null ? "" : value.trim();
+        return clean.isEmpty() ? "D" : clean.substring(0, 1).toUpperCase(Locale.ROOT);
+    }
+
+    private TextView quickAction(String title, String subtitle, final String tab) {
+        TextView action = text(title + "\n" + subtitle, 14, TEXT, true);
+        action.setLineSpacing(dp(3), 1f);
+        action.setPadding(dp(14), dp(14), dp(14), dp(14));
+        action.setBackground(rounded(SURFACE, BORDER, 12));
+        action.setClickable(true);
+        action.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { showMain(tab); }
         });
+        return action;
     }
 
     private void loadHome() {
-        titleView.setText("Inicio");
-        subtitleView.setText("Solo lectura · API Bubble V1");
+        setPageHeading("RESUMEN", "Inicio", "Tu operación DEZGRE en el teléfono.");
+        body.removeAllViews();
         body.addView(loadingInline("Cargando tu espacio…"));
         api.get("/me", bearer, new ApiClient.Callback() {
             @Override public void onSuccess(final JSONObject me) {
@@ -82,13 +236,57 @@
                         runOnUiThread(new Runnable() {
                             @Override public void run() {
                                 body.removeAllViews();
+                                applyIdentity(me);
                                 JSONObject user = me.optJSONObject("user");
                                 JSONObject store = storeResponse.optJSONObject("store");
-                                String name = user == null ? "Usuario" : user.optString("name", "Usuario");
-                                body.addView(text("Hola, " + name, 27, TEXT, true));
+                                if (store != null) {
+                                    String storeName = store.optString("name", "").trim();
+                                    if (!storeName.isEmpty()) currentStoreName = storeName;
+                                    String role = store.optString("role", "").trim();
+                                    if (!role.isEmpty()) currentUserRole = role;
+                                    updateChromeIdentity();
+                                }
+                                String name = user == null ? currentUserName : user.optString("name", currentUserName);
+                                body.addView(text("Hola, " + name, 24, TEXT, true));
                                 body.addView(gap(5));
-                                body.addView(text("Tu app está conectada exclusivamente a api.dezgre.com/v1.", 14, MUTED, false));
+                                body.addView(text("Todo lo disponible aquí viene exclusivamente de api.dezgre.com/v1.", 13, MUTED, false));
                                 body.addView(gap(18));
+
                                 LinearLayout storeCard = card();
-                                storeCard.addView(text("Tienda actual", 13, MUTED, true));
+                                TextView label = eyebrow("TIENDA ACTUAL");
+                                storeCard.addView(label);
+                                storeCard.addView(gap(8));
+                                storeCard.addView(text(store == null ? currentStoreName : store.optString("name", currentStoreName), 24, TEXT, true));
                                 storeCard.addView(gap(6));
+                                TextView roleBadge = text(store == null ? currentUserRole : store.optString("role", currentUserRole), 11, ACCENT, true);
+                                roleBadge.setPadding(dp(9), dp(5), dp(9), dp(5));
+                                roleBadge.setBackground(rounded(ACCENT_SOFT, Color.TRANSPARENT, 100));
+                                storeCard.addView(roleBadge, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                                body.addView(storeCard);
+
+                                LinearLayout quick = new LinearLayout(MainActivity.this);
+                                quick.setOrientation(LinearLayout.HORIZONTAL);
+                                TextView products = quickAction("Productos", "Ver catálogo", "products");
+                                TextView profile = quickAction("Perfil", "Cuenta y avisos", "profile");
+                                LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, dp(78), 1f);
+                                left.setMargins(0, 0, dp(6), dp(12));
+                                LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, dp(78), 1f);
+                                right.setMargins(dp(6), 0, 0, dp(12));
+                                quick.addView(products, left);
+                                quick.addView(profile, right);
+                                body.addView(quick);
+
+                                LinearLayout status = card();
+                                status.addView(text("● Sesión protegida", 14, SUCCESS, true));
+                                status.addView(gap(4));
+                                status.addView(text("Bearer cifrado con Android Keystore · sin cookies web · sin acceso directo a base de datos.", 12, MUTED, false));
+                                body.addView(status);
+                            }
+                        });
+                    }
+                    @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudo cargar la tienda."); }
+                });
+            }
+            @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudo cargar tu perfil."); }
+        });
+    }
