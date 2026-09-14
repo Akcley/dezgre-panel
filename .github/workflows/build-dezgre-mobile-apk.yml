@@ -39,28 +39,68 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Restore stable preview signing key
+        id: preview-signing-cache
+        uses: actions/cache@v4
+        with:
+          path: .signing/dezgre-preview.jks
+          key: dezgre-mobile-preview-signing-v1
+
+      - name: Bootstrap preview signing key once
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .signing
+          if [ ! -s .signing/dezgre-preview.jks ]; then
+            keytool -genkeypair \
+              -keystore .signing/dezgre-preview.jks \
+              -storepass dezgre-preview-v1 \
+              -keypass dezgre-preview-v1 \
+              -alias dezgre-preview \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=DEZGRE Mobile Preview,O=DEZGRE,C=PE" \
+              -noprompt
+          fi
+          keytool -list -v \
+            -keystore .signing/dezgre-preview.jks \
+            -storepass dezgre-preview-v1 \
+            -alias dezgre-preview | grep -E 'SHA256:|Alias name:|Valid from:'
+
       - name: Reassemble generated Java source
         shell: bash
         run: cat app/src/main/java/com/dezgre/mobile/MainActivity.java.part* > app/src/main/java/com/dezgre/mobile/MainActivity.java
 
-      - name: Build APK
+      - name: Build APK with stable preview signature
         shell: bash
+        env:
+          DEZGRE_PREVIEW_KEYSTORE: ${{ github.workspace }}/.signing/dezgre-preview.jks
+          DEZGRE_PREVIEW_STORE_PASSWORD: dezgre-preview-v1
+          DEZGRE_PREVIEW_KEY_ALIAS: dezgre-preview
+          DEZGRE_PREVIEW_KEY_PASSWORD: dezgre-preview-v1
+          DEZGRE_VERSION_CODE: ${{ github.run_number }}
+          DEZGRE_VERSION_NAME: 0.1.1
         run: gradle :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Stage APK and checksum
+      - name: Stage APK checksum and signing certificate
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/DEZGRE-Mobile-v0.1.0.apk
-          sha256sum dist/DEZGRE-Mobile-v0.1.0.apk | tee dist/DEZGRE-Mobile-v0.1.0.apk.sha256
+          cp app/build/outputs/apk/debug/app-debug.apk dist/DEZGRE-Mobile-v0.1.1.apk
+          sha256sum dist/DEZGRE-Mobile-v0.1.1.apk | tee dist/DEZGRE-Mobile-v0.1.1.apk.sha256
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/DEZGRE-Mobile-v0.1.1.apk | tee dist/DEZGRE-Mobile-v0.1.1.cert.txt
+          unzip -t dist/DEZGRE-Mobile-v0.1.1.apk >/dev/null
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DEZGRE-Mobile-v0.1.0
+          name: DEZGRE-Mobile-v0.1.1
           path: |
-            dist/DEZGRE-Mobile-v0.1.0.apk
-            dist/DEZGRE-Mobile-v0.1.0.apk.sha256
+            dist/DEZGRE-Mobile-v0.1.1.apk
+            dist/DEZGRE-Mobile-v0.1.1.apk.sha256
+            dist/DEZGRE-Mobile-v0.1.1.cert.txt
           if-no-files-found: error
           retention-days: 30
 
@@ -69,8 +109,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f dist/DEZGRE-Mobile-v0.1.0.apk dist/DEZGRE-Mobile-v0.1.0.apk.sha256
+          git add -f dist/DEZGRE-Mobile-v0.1.1.apk dist/DEZGRE-Mobile-v0.1.1.apk.sha256 dist/DEZGRE-Mobile-v0.1.1.cert.txt
           if ! git diff --cached --quiet; then
-            git commit -m "build: publish DEZGRE Mobile v0.1.0 APK [skip ci]"
+            git commit -m "build: publish DEZGRE Mobile v0.1.1 APK [skip ci]"
             git push origin HEAD:mobile-app-v1-build
           fi
