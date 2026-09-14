@@ -73,6 +73,7 @@ jobs:
           source = '\n'.join(sources)
           assert 'API_AUTH_SECRET' not in source
           assert 'AUTH_SECRET' not in source
+          assert 'https://api.dezgre.com/v1' in source
           with zipfile.ZipFile('app/build/outputs/apk/debug/app-debug.apk') as z:
               dex = z.read('classes.dex')
           assert b'API_AUTH_SECRET' not in dex
@@ -80,7 +81,6 @@ jobs:
           assert b'-----BEGIN PRIVATE KEY-----' not in dex
           assert b'-----BEGIN RSA PRIVATE KEY-----' not in dex
           assert b'-----BEGIN EC PRIVATE KEY-----' not in dex
-          assert b'https://api.dezgre.com/v1' in dex
           print('STATIC_SECURITY=PASS')
           PY
 
