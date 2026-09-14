@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.DezgreMobile" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <!-- Android 15 (targetSdk 35) enables edge-to-edge by default. For v0.1.0,
+             keep the system-managed safe content area so status/navigation bars and
+             display cutouts never cover the existing native screens. Insets remain
+             device-driven; there are no model-specific margins. -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:statusBarColor">#0B1220</item>
+        <item name="android:navigationBarColor">#0B1220</item>
+    </style>
+</resources>
