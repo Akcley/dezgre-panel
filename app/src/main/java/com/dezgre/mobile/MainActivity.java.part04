@@ -116,8 +116,8 @@
         drawer.setPadding(dp(8), dp(10), dp(8), dp(12));
         drawer.setBackgroundColor(PANEL_DARK);
         drawer.setVisibility(View.GONE);
-        int maxWidth = Math.max(dp(240), getResources().getDisplayMetrics().widthPixels - dp(52));
-        int drawerWidth = Math.min(dp(300), maxWidth);
+        int maxWidth = Math.max(dp(250), getResources().getDisplayMetrics().widthPixels - dp(52));
+        int drawerWidth = Math.min(dp(310), maxWidth);
         FrameLayout.LayoutParams drawerParams = new FrameLayout.LayoutParams(drawerWidth, ViewGroup.LayoutParams.MATCH_PARENT);
         drawerParams.gravity = Gravity.START;
         shell.addView(drawer, drawerParams);
@@ -134,7 +134,7 @@
         brandCopy.setOrientation(LinearLayout.VERTICAL);
         brandCopy.setPadding(dp(10), 0, 0, 0);
         brandCopy.addView(text(currentStoreName, 14, Color.WHITE, true));
-        brandCopy.addView(text("DEZGRE Mobile", 10, Color.rgb(167, 167, 175), false));
+        brandCopy.addView(text("DEZGRE", 10, Color.rgb(167, 167, 175), false));
         brandRow.addView(brandCopy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         TextView close = text("×", 29, Color.rgb(215, 215, 220), false);
         close.setGravity(Gravity.CENTER);
@@ -145,9 +145,15 @@
         brandRow.addView(close, new LinearLayout.LayoutParams(dp(40), dp(44)));
         drawer.addView(brandRow);
 
+        drawer.addView(drawerUnavailableItem("↔", "Conexiones"));
+        drawer.addView(drawerUnavailableItem("✉", "Mensajes"));
         drawer.addView(drawerItem("⌂", "Inicio", "home", "home".equals(currentTab)));
-        drawer.addView(drawerItem("▦", "Productos", "products", "products".equals(currentTab)));
-        drawer.addView(drawerItem("◉", "Perfil", "profile", "profile".equals(currentTab)));
+        drawer.addView(drawerItem("▦", "Mi Panel", "home", false));
+        drawer.addView(drawerItem("▤", "Productos", "products", "products".equals(currentTab)));
+        drawer.addView(drawerUnavailableItem("◈", "Vendedora IA"));
+        drawer.addView(drawerUnavailableItem("▣", "Pedidos"));
+        drawer.addView(drawerUnavailableItem("⚙", "Configuración"));
+        drawer.addView(drawerUnavailableItem("◇", "Mi tienda / Web"));
 
         View spacer = new View(this);
         drawer.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
@@ -165,8 +171,11 @@
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.setPadding(dp(9), 0, 0, 0);
         copy.addView(text(currentUserName, 12, Color.WHITE, true));
-        copy.addView(text(currentUserRole.isEmpty() ? "Cuenta DEZGRE" : currentUserRole, 10, Color.rgb(167, 167, 175), false));
+        copy.addView(text(currentUserRole.isEmpty() ? "Cuenta" : currentUserRole, 10, Color.rgb(167, 167, 175), false));
         account.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView chevron = text("›", 22, Color.rgb(215, 215, 220), false);
+        chevron.setGravity(Gravity.CENTER);
+        account.addView(chevron, new LinearLayout.LayoutParams(dp(24), dp(34)));
         account.setClickable(true);
         account.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { closeDrawer(); showMain("profile"); }
@@ -174,24 +183,56 @@
         LinearLayout.LayoutParams accountParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         accountParams.setMargins(dp(8), dp(8), dp(8), dp(4));
         drawer.addView(account, accountParams);
-        TextView apiLabel = text("API Bubble V1 · solo endpoints certificados", 9, Color.rgb(125, 125, 132), false);
-        apiLabel.setGravity(Gravity.CENTER);
-        drawer.addView(apiLabel);
     }
 
     private TextView drawerItem(String icon, String label, final String tab, boolean active) {
-        TextView item = text(icon + "   " + label, 14, active ? Color.WHITE : Color.rgb(215, 215, 220), active);
+        TextView item = text(icon + "   " + label, 13, active ? Color.WHITE : Color.rgb(215, 215, 220), active);
         item.setGravity(Gravity.CENTER_VERTICAL);
-        item.setPadding(dp(14), dp(11), dp(14), dp(11));
+        item.setPadding(dp(14), dp(9), dp(14), dp(9));
         item.setBackground(rounded(active ? PANEL_DARK_ACTIVE : Color.TRANSPARENT, Color.TRANSPARENT, 9));
         item.setClickable(true);
         item.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { closeDrawer(); showMain(tab); }
         });
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
-        params.setMargins(dp(8), dp(2), dp(8), dp(2));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42));
+        params.setMargins(dp(8), dp(1), dp(8), dp(1));
         item.setLayoutParams(params);
         return item;
+    }
+
+    private TextView drawerUnavailableItem(String icon, final String label) {
+        TextView item = text(icon + "   " + label, 13, Color.rgb(205, 205, 211), false);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(dp(14), dp(9), dp(14), dp(9));
+        item.setBackground(rounded(Color.TRANSPARENT, Color.TRANSPARENT, 9));
+        item.setClickable(true);
+        item.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                closeDrawer();
+                showUnavailableSection(label);
+            }
+        });
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42));
+        params.setMargins(dp(8), dp(1), dp(8), dp(1));
+        item.setLayoutParams(params);
+        return item;
+    }
+
+    private void showUnavailableSection(String label) {
+        currentTab = "section";
+        setPageHeading("DEZGRE", label, "Módulo del panel web.");
+        body.removeAllViews();
+        LinearLayout moduleCard = card();
+        moduleCard.addView(text(label, 20, TEXT, true));
+        moduleCard.addView(gap(7));
+        moduleCard.addView(text("Esta sección forma parte de DEZGRE y ya existe en el panel web. La activaremos aquí cuando API V1 publique sus operaciones móviles para no duplicar lógica ni mostrar datos falsos.", 13, MUTED, false));
+        moduleCard.addView(gap(14));
+        Button back = button("Volver al Inicio", false);
+        back.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { showMain("home"); }
+        });
+        moduleCard.addView(back);
+        body.addView(moduleCard);
     }
 
     private void openDrawer() {
@@ -249,7 +290,7 @@
                                 String name = user == null ? currentUserName : user.optString("name", currentUserName);
                                 body.addView(text("Hola, " + name, 24, TEXT, true));
                                 body.addView(gap(5));
-                                body.addView(text("Todo lo disponible aquí viene exclusivamente de api.dezgre.com/v1.", 13, MUTED, false));
+                                body.addView(text("Administra tu tienda desde DEZGRE Mobile.", 13, MUTED, false));
                                 body.addView(gap(18));
 
                                 LinearLayout storeCard = card();
@@ -267,7 +308,7 @@
                                 LinearLayout quick = new LinearLayout(MainActivity.this);
                                 quick.setOrientation(LinearLayout.HORIZONTAL);
                                 TextView products = quickAction("Productos", "Ver catálogo", "products");
-                                TextView profile = quickAction("Perfil", "Cuenta y avisos", "profile");
+                                TextView profile = quickAction("Mi cuenta", "Perfil y avisos", "profile");
                                 LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, dp(78), 1f);
                                 left.setMargins(0, 0, dp(6), dp(12));
                                 LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, dp(78), 1f);
@@ -279,7 +320,7 @@
                                 LinearLayout status = card();
                                 status.addView(text("● Sesión protegida", 14, SUCCESS, true));
                                 status.addView(gap(4));
-                                status.addView(text("Bearer cifrado con Android Keystore · sin cookies web · sin acceso directo a base de datos.", 12, MUTED, false));
+                                status.addView(text("Tu acceso se mantiene cifrado de forma segura en este dispositivo.", 12, MUTED, false));
                                 body.addView(status);
                             }
                         });
