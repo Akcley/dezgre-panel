@@ -18,57 +18,77 @@
         wrap.setGravity(Gravity.CENTER);
         wrap.setPadding(dp(28), dp(28), dp(28), dp(28));
         wrap.setBackgroundColor(BG);
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.ic_launcher);
+        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        wrap.addView(logo, new LinearLayout.LayoutParams(dp(70), dp(70)));
+        wrap.addView(gap(18));
         ProgressBar progress = new ProgressBar(this);
-        wrap.addView(progress);
-        wrap.addView(gap(16));
-        wrap.addView(text(message, 16, MUTED, false));
+        wrap.addView(progress, new LinearLayout.LayoutParams(dp(34), dp(34)));
+        wrap.addView(gap(14));
+        TextView label = text(message, 14, MUTED, false);
+        label.setGravity(Gravity.CENTER);
+        wrap.addView(label);
         return wrap;
     }
 
     private void showLogin(String initialError) {
         bearer = null;
+        currentUserName = "Usuario";
+        currentUserRole = "";
+        currentStoreName = "Tienda";
         final ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(BG);
         LinearLayout wrap = new LinearLayout(this);
         wrap.setOrientation(LinearLayout.VERTICAL);
         wrap.setGravity(Gravity.CENTER_HORIZONTAL);
-        wrap.setPadding(dp(24), dp(48), dp(24), dp(32));
+        wrap.setPadding(dp(22), dp(36), dp(22), dp(32));
         scroll.addView(wrap);
 
-        TextView badge = text("DEZGRE", 14, ACCENT, true);
-        badge.setGravity(Gravity.CENTER);
-        badge.setPadding(dp(14), dp(7), dp(14), dp(7));
-        badge.setBackground(rounded(Color.rgb(229, 250, 243), Color.TRANSPARENT, 100));
-        wrap.addView(badge);
-        wrap.addView(gap(18));
-        TextView heading = text("Tu operación, en el teléfono", 29, TEXT, true);
+        ImageView logo = new ImageView(this);
+        logo.setImageResource(R.drawable.ic_launcher);
+        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        wrap.addView(logo, new LinearLayout.LayoutParams(dp(88), dp(88)));
+        wrap.addView(gap(16));
+        TextView brand = eyebrow("DEZGRE MOBILE");
+        brand.setGravity(Gravity.CENTER);
+        wrap.addView(brand);
+        wrap.addView(gap(8));
+        TextView heading = text("Accede a tu operación", 30, TEXT, true);
         heading.setGravity(Gravity.CENTER);
         wrap.addView(heading);
-        wrap.addView(gap(8));
-        TextView intro = text("Acceso móvil seguro mediante DEZGRE API Bubble V1.", 15, MUTED, false);
+        wrap.addView(gap(7));
+        TextView intro = text("La misma cuenta de DEZGRE, ahora en una experiencia móvil conectada solo a API V1.", 14, MUTED, false);
         intro.setGravity(Gravity.CENTER);
         wrap.addView(intro);
-        wrap.addView(gap(30));
+        wrap.addView(gap(26));
 
         LinearLayout loginCard = card();
+        loginCard.setPadding(dp(18), dp(20), dp(18), dp(18));
         wrap.addView(loginCard);
         loginCard.addView(text("Iniciar sesión", 20, TEXT, true));
-        loginCard.addView(gap(14));
+        loginCard.addView(gap(5));
+        loginCard.addView(text("Ingresa con tu correo y contraseña.", 13, MUTED, false));
+        loginCard.addView(gap(16));
         final EditText email = new EditText(this);
         email.setHint("Correo electrónico");
+        email.setTextColor(TEXT);
+        email.setHintTextColor(MUTED);
         email.setSingleLine(true);
         email.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
         email.setPadding(dp(14), dp(4), dp(14), dp(4));
-        email.setBackground(rounded(Color.rgb(249, 250, 251), BORDER, 10));
+        email.setBackground(rounded(Color.rgb(250, 250, 251), BORDER, 9));
         loginCard.addView(email, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
         loginCard.addView(gap(10));
         final EditText password = new EditText(this);
         password.setHint("Contraseña");
+        password.setTextColor(TEXT);
+        password.setHintTextColor(MUTED);
         password.setSingleLine(true);
         password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         password.setPadding(dp(14), dp(4), dp(14), dp(4));
-        password.setBackground(rounded(Color.rgb(249, 250, 251), BORDER, 10));
+        password.setBackground(rounded(Color.rgb(250, 250, 251), BORDER, 9));
         loginCard.addView(password, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
         loginCard.addView(gap(12));
 
@@ -80,7 +100,7 @@
         final Button submit = button("Entrar", true);
         loginCard.addView(submit, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
         loginCard.addView(gap(14));
-        TextView privacy = text("La contraseña no se guarda. El Bearer de sesión se cifra con Android Keystore.", 12, MUTED, false);
+        TextView privacy = text("La contraseña no se guarda. Tu sesión queda protegida con Android Keystore.", 12, MUTED, false);
         loginCard.addView(privacy);
 
         submit.setOnClickListener(new View.OnClickListener() {
