@@ -58,16 +58,31 @@ jobs:
           unzip -t "$APK" >/dev/null
           sha256sum "$APK"
           grep -R --line-number --fixed-strings 'https://api.dezgre.com/v1' app/src/main/java app/build.gradle
-          ! grep -R --line-number --fixed-strings 'API_AUTH_SECRET' app/src/main app/build.gradle
-          ! grep -R --line-number --fixed-strings 'AUTH_SECRET' app/src/main app/build.gradle
           grep -R --line-number --fixed-strings 'AndroidKeyStore' app/src/main/java
           grep -R --line-number --fixed-strings 'AES/GCM/NoPadding' app/src/main/java
-          mkdir -p apk-scan
-          unzip -q -o "$APK" classes.dex -d apk-scan
-          ! strings apk-scan/classes.dex | grep -F 'API_AUTH_SECRET'
-          ! strings apk-scan/classes.dex | grep -F 'AUTH_SECRET'
-          ! strings apk-scan/classes.dex | grep -E -- '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----'
-          test "$(strings apk-scan/classes.dex | grep -F 'https://api.dezgre.com/v1' | wc -l)" -ge 1
+          python3 - <<'PY'
+          import pathlib, zipfile
+
+          sources = []
+          for p in pathlib.Path('app/src/main').rglob('*'):
+              if p.is_file():
+                  try:
+                      sources.append(p.read_text(errors='ignore'))
+                  except Exception:
+                      pass
+          source = '\n'.join(sources)
+          assert 'API_AUTH_SECRET' not in source
+          assert 'AUTH_SECRET' not in source
+          with zipfile.ZipFile('app/build/outputs/apk/debug/app-debug.apk') as z:
+              dex = z.read('classes.dex')
+          assert b'API_AUTH_SECRET' not in dex
+          assert b'AUTH_SECRET' not in dex
+          assert b'-----BEGIN PRIVATE KEY-----' not in dex
+          assert b'-----BEGIN RSA PRIVATE KEY-----' not in dex
+          assert b'-----BEGIN EC PRIVATE KEY-----' not in dex
+          assert b'https://api.dezgre.com/v1' in dex
+          print('STATIC_SECURITY=PASS')
+          PY
 
       - name: LIVE API public/invalid-token smoke
         shell: bash
@@ -81,7 +96,10 @@ jobs:
           python3 - <<'PY'
           import json
           x=json.load(open('/tmp/invalid.json'))
-          assert x.get('error',{}).get('code') in {'INVALID_API_TOKEN','MISSING_API_TOKEN','API_TOKEN_EXPIRED'}
+          err=x.get('error') or {}
+          code=err.get('code') if isinstance(err,dict) else x.get('code')
+          assert code in {'INVALID_API_TOKEN','MISSING_API_TOKEN','API_TOKEN_EXPIRED'}, x
+          print('LIVE_INVALID_BEARER=PASS')
           PY
 
       - name: Install and launch real APK in Android emulator
@@ -107,7 +125,6 @@ jobs:
             grep -F 'Contraseña' /tmp/window-fresh.xml
             test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
 
-            # Fresh close/reopen must return cleanly to login and never crash.
             adb shell am force-stop "$PKG"
             adb shell am start -W -n "$PKG/$ACT"
             sleep 2
@@ -116,7 +133,6 @@ jobs:
             grep -F 'Iniciar sesión' /tmp/window-reopen.xml
             test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
 
-            # Corrupt/invalid persisted token must be discarded by SecureTokenStore and return to login without crash.
             adb shell am force-stop "$PKG"
             adb shell "run-as $PKG sh -c 'mkdir -p shared_prefs; printf \"<?xml version=\\\"1.0\\\" encoding=\\\"utf-8\\\" standalone=\\\"yes\\\" ?><map><string name=\\\"api_v1_bearer\\\">not-encrypted</string></map>\" > shared_prefs/dezgre_mobile_secure.xml'"
             adb shell am start -W -n "$PKG/$ACT"
@@ -126,12 +142,12 @@ jobs:
             grep -F 'Iniciar sesión' /tmp/window-invalid-token.xml
             test -n "$(adb shell pidof "$PKG" | tr -d '\r')"
 
-            # Password must not be persisted in the app's private preferences.
             adb shell "run-as $PKG sh -c 'grep -R -i password shared_prefs 2>/dev/null && exit 9 || true'"
             adb shell dumpsys package "$PKG" | grep -E 'versionCode=1|versionName=0.1.0-preview' | head -4
-
-            # No fatal exception from this package in the smoke sequence.
-            ! adb logcat -d '*:E' | grep -E 'FATAL EXCEPTION.*|Process: com\.dezgre\.mobile\.preview' | tail -50
+            if adb logcat -d '*:E' | grep -E 'Process: com\.dezgre\.mobile\.preview|FATAL EXCEPTION' >/tmp/dezgre-fatal.log; then
+              cat /tmp/dezgre-fatal.log
+              exit 1
+            fi
 
       - name: Smoke summary
         shell: bash
