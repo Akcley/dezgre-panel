@@ -51,6 +51,7 @@ public final class MainActivity extends Activity {
     private String currentStoreName = "Tienda";
     private String currentUserName = "Usuario";
     private String currentUserRole = "";
+    private String currentUserAvatar = "";
     private FrameLayout shell;
     private LinearLayout root;
     private LinearLayout body;
@@ -157,6 +158,34 @@ public final class MainActivity extends Activity {
         return card;
     }
 
+    private String resolveUserAvatar(JSONObject user) {
+        if (user == null) return "";
+        String[] keys = new String[]{"avatar", "avatar_url", "photo", "photo_url", "image", "image_url"};
+        for (String key : keys) {
+            String value = user.optString(key, "").trim();
+            if (!value.isEmpty() && !"null".equalsIgnoreCase(value)) return value;
+        }
+        return "";
+    }
+
+    private View userAvatarView(String name, String avatarSource, int size, int textSize) {
+        FrameLayout frame = new FrameLayout(this);
+        TextView fallback = text(name == null || name.trim().isEmpty() ? "D" : name.trim().substring(0, 1).toUpperCase(Locale.ROOT), textSize, Color.WHITE, true);
+        fallback.setGravity(Gravity.CENTER);
+        fallback.setBackground(rounded(Color.rgb(75, 77, 84), Color.rgb(91, 93, 101), 100));
+        frame.addView(fallback, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        ImageView image = new ImageView(this);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        image.setBackground(rounded(Color.rgb(75, 77, 84), Color.TRANSPARENT, 100));
+        image.setClipToOutline(true);
+        image.setVisibility(View.GONE);
+        frame.addView(image, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        AvatarLoader.load(this, image, fallback, avatarSource);
+        frame.setLayoutParams(new LinearLayout.LayoutParams(dp(size), dp(size)));
+        return frame;
+    }
+
     private void applyIdentity(JSONObject payload) {
         if (payload == null) return;
         JSONObject user = payload.optJSONObject("user");
@@ -164,6 +193,8 @@ public final class MainActivity extends Activity {
         if (user != null) {
             String name = user.optString("name", "").trim();
             if (!name.isEmpty()) currentUserName = name;
+            String avatar = resolveUserAvatar(user);
+            if (!avatar.isEmpty()) currentUserAvatar = avatar;
         }
         if (store != null) {
             String name = store.optString("name", "").trim();
