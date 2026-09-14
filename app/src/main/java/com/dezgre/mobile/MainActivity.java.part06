@@ -1,35 +1,6 @@
-            if (product == null) continue;
-            LinearLayout item = card();
-            String name = product.optString("name", "Producto");
-            item.addView(text(name, 18, TEXT, true));
-            String category = product.optString("category", "");
-            if (!category.isEmpty() && !"null".equals(category)) {
-                item.addView(gap(4));
-                item.addView(text(category, 12, MUTED, false));
-            }
-            item.addView(gap(9));
-            LinearLayout meta = new LinearLayout(this);
-            meta.setOrientation(LinearLayout.HORIZONTAL);
-            meta.addView(text(price(product.optDouble("price", 0)), 16, ACCENT, true), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            meta.addView(text("Stock: " + product.optInt("stock", 0), 13, product.optInt("stock", 0) > 0 ? MUTED : DANGER, true));
-            item.addView(meta);
-            item.setClickable(true);
-            item.setForeground(getDrawable(android.R.drawable.list_selector_background));
-            item.setOnClickListener(new View.OnClickListener() {
-                @Override public void onClick(View v) { loadProductDetail(product.optString("id", "")); }
-            });
-            body.addView(item);
-        }
-    }
-
-    private String price(double amount) {
-        return String.format(Locale.US, "S/ %.2f", amount);
-    }
-
     private void loadProductDetail(final String productId) {
         if (productId.isEmpty()) return;
-        titleView.setText("Detalle de producto");
-        subtitleView.setText("/v1/products/" + productId);
+        setPageHeading("PRODUCTO", "Detalle de producto", "Información disponible mediante Bubble API V1.");
         body.removeAllViews();
         Button back = button("← Volver a productos", false);
         back.setOnClickListener(new View.OnClickListener() {
@@ -55,41 +26,91 @@
         body.addView(back);
         body.addView(gap(14));
         if (product == null) {
-            body.addView(text("Producto no disponible.", 16, DANGER, true));
+            LinearLayout missing = card();
+            missing.addView(text("Producto no disponible.", 16, DANGER, true));
+            body.addView(missing);
             return;
         }
+
         LinearLayout main = card();
-        main.addView(text(product.optString("name", "Producto"), 25, TEXT, true));
-        main.addView(gap(6));
+        LinearLayout identity = new LinearLayout(this);
+        identity.setOrientation(LinearLayout.HORIZONTAL);
+        identity.setGravity(Gravity.CENTER_VERTICAL);
+        String name = product.optString("name", "Producto");
+        TextView thumb = text(safeInitial(name), 28, ACCENT, true);
+        thumb.setGravity(Gravity.CENTER);
+        thumb.setBackground(rounded(Color.rgb(244, 241, 246), BORDER, 12));
+        identity.addView(thumb, new LinearLayout.LayoutParams(dp(84), dp(84)));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.setPadding(dp(14), 0, 0, 0);
+        copy.addView(text(name, 22, TEXT, true));
+        String category = product.optString("category", "");
+        if (!category.isEmpty() && !"null".equals(category)) {
+            copy.addView(gap(4));
+            copy.addView(text(category, 12, MUTED, false));
+        }
         String sku = product.optString("sku", "");
-        if (!sku.isEmpty() && !"null".equals(sku)) main.addView(text("SKU " + sku, 12, MUTED, true));
-        main.addView(gap(14));
-        main.addView(text("Precio", 12, MUTED, true));
-        main.addView(text(price(product.optDouble("price", 0)), 22, ACCENT, true));
+        if (!sku.isEmpty() && !"null".equals(sku)) {
+            copy.addView(gap(3));
+            copy.addView(text("SKU " + sku, 11, MUTED, true));
+        }
+        identity.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        main.addView(identity);
+        main.addView(gap(18));
+
+        TextView priceLabel = eyebrow("PRECIO");
+        main.addView(priceLabel);
+        main.addView(gap(4));
+        main.addView(text(price(product.optDouble("price", 0)), 24, SUCCESS, true));
         if (!product.isNull("offerPrice")) {
             main.addView(gap(8));
-            main.addView(text("Oferta: " + price(product.optDouble("offerPrice", 0)), 14, TEXT, true));
+            main.addView(text("Oferta: " + price(product.optDouble("offerPrice", 0)), 13, TEXT, true));
         }
         if (!product.isNull("threeUnitPrice")) {
-            main.addView(text("3 unidades: " + price(product.optDouble("threeUnitPrice", 0)), 14, TEXT, true));
+            main.addView(gap(3));
+            main.addView(text("3 unidades: " + price(product.optDouble("threeUnitPrice", 0)), 13, TEXT, true));
         }
-        main.addView(gap(10));
-        main.addView(text("Stock: " + product.optInt("stock", 0), 14, product.optInt("stock", 0) > 0 ? TEXT : DANGER, true));
+        main.addView(gap(12));
+        int stock = product.optInt("stock", 0);
+        TextView stockText = text("Stock: " + stock, 13, stock > 0 ? TEXT : DANGER, true);
+        main.addView(stockText);
         body.addView(main);
+
         String description = product.optString("description", "");
         if (!description.isEmpty() && !"null".equals(description)) {
             LinearLayout descriptionCard = card();
-            descriptionCard.addView(text("Descripción", 14, MUTED, true));
-            descriptionCard.addView(gap(7));
-            descriptionCard.addView(text(description, 15, TEXT, false));
+            descriptionCard.addView(eyebrow("DESCRIPCIÓN"));
+            descriptionCard.addView(gap(8));
+            descriptionCard.addView(text(description, 14, TEXT, false));
             body.addView(descriptionCard);
         }
+
         LinearLayout safety = card();
-        safety.addView(text("Modo lectura", 13, MUTED, true));
-        safety.addView(gap(6));
-        safety.addView(text("Esta versión no modifica productos ni stock.", 14, TEXT, false));
+        safety.addView(text("Solo lectura", 13, ACCENT, true));
+        safety.addView(gap(5));
+        safety.addView(text("Esta versión consulta información; no modifica productos ni stock.", 12, MUTED, false));
         body.addView(safety);
     }
 
     private void loadProfile() {
-        titleView.setText("Perfil");
+        setPageHeading("CUENTA", "Perfil", "Identidad, tiendas y preferencias del dispositivo.");
+        body.removeAllViews();
+        body.addView(loadingInline("Cargando perfil…"));
+        api.get("/me", bearer, new ApiClient.Callback() {
+            @Override public void onSuccess(final JSONObject me) {
+                api.get("/stores", bearer, new ApiClient.Callback() {
+                    @Override public void onSuccess(final JSONObject stores) {
+                        runOnUiThread(new Runnable() {
+                            @Override public void run() {
+                                applyIdentity(me);
+                                renderProfile(me, stores.optJSONArray("stores"));
+                            }
+                        });
+                    }
+                    @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudieron cargar tus tiendas."); }
+                });
+            }
+            @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudo cargar el perfil."); }
+        });
+    }
