@@ -2,22 +2,43 @@ plugins {
     id 'com.android.application'
 }
 
+def previewKeystore = System.getenv('DEZGRE_PREVIEW_KEYSTORE')
+def previewStorePassword = System.getenv('DEZGRE_PREVIEW_STORE_PASSWORD') ?: 'dezgre-preview-v1'
+def previewKeyAlias = System.getenv('DEZGRE_PREVIEW_KEY_ALIAS') ?: 'dezgre-preview'
+def previewKeyPassword = System.getenv('DEZGRE_PREVIEW_KEY_PASSWORD') ?: 'dezgre-preview-v1'
+def buildVersionCode = (System.getenv('DEZGRE_VERSION_CODE') ?: '2').toInteger()
+def buildVersionName = System.getenv('DEZGRE_VERSION_NAME') ?: '0.1.1'
+
 android {
     namespace 'com.dezgre.mobile'
     compileSdk 35
+
+    signingConfigs {
+        previewStable {
+            if (previewKeystore) {
+                storeFile file(previewKeystore)
+                storePassword previewStorePassword
+                keyAlias previewKeyAlias
+                keyPassword previewKeyPassword
+            }
+        }
+    }
 
     defaultConfig {
         applicationId 'com.dezgre.mobile'
         minSdk 23
         targetSdk 35
-        versionCode 1
-        versionName '0.1.0'
+        versionCode buildVersionCode
+        versionName buildVersionName
     }
 
     buildTypes {
         debug {
             applicationIdSuffix '.preview'
             versionNameSuffix '-preview'
+            if (previewKeystore) {
+                signingConfig signingConfigs.previewStable
+            }
         }
         release {
             minifyEnabled false
