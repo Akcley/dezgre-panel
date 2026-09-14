@@ -1,0 +1,325 @@
+
+    private String mobileMoney(double value) {
+        return String.format(Locale.US, "S/ %.2f", value);
+    }
+
+    private String mobileValue(String value, String fallback) {
+        String clean = value == null ? "" : value.trim();
+        return clean.isEmpty() || "null".equalsIgnoreCase(clean) ? fallback : clean;
+    }
+
+    private LinearLayout mobileMetric(String label, String value, String hint) {
+        LinearLayout metric = new LinearLayout(this);
+        metric.setOrientation(LinearLayout.VERTICAL);
+        metric.setPadding(dp(13), dp(12), dp(13), dp(12));
+        metric.setBackground(rounded(SURFACE, BORDER, 11));
+        metric.addView(text(label, 10, MUTED, true));
+        metric.addView(gap(5));
+        metric.addView(text(value, 22, TEXT, true));
+        if (hint != null && !hint.trim().isEmpty()) {
+            metric.addView(gap(3));
+            metric.addView(text(hint, 10, MUTED, false));
+        }
+        return metric;
+    }
+
+    private void addMobileMetricRow(LinearLayout parent, LinearLayout first, LinearLayout second) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        left.setMargins(0, 0, dp(6), dp(10));
+        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        right.setMargins(dp(6), 0, 0, dp(10));
+        row.addView(first, left);
+        row.addView(second, right);
+        parent.addView(row);
+    }
+
+    private void loadDashboard() {
+        setPageHeading("MI PANEL", "Mi Panel", "Resumen operativo real de tu tienda.");
+        body.removeAllViews();
+        body.addView(loadingInline("Cargando indicadores…"));
+        api.get("/dashboard/summary", bearer, new ApiClient.Callback() {
+            @Override public void onSuccess(final JSONObject json) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() { renderDashboard(json); }
+                });
+            }
+
+            @Override public void onError(ApiClient.ApiException error) {
+                handlePrivateError(error, "No se pudo cargar Mi Panel.");
+            }
+        });
+    }
+
+    private void renderDashboard(JSONObject json) {
+        body.removeAllViews();
+        JSONObject filters = json.optJSONObject("filters");
+        JSONObject totals = json.optJSONObject("totals");
+        JSONObject month = json.optJSONObject("month");
+        if (totals == null) totals = new JSONObject();
+        if (month == null) month = new JSONObject();
+
+        LinearLayout rangeCard = card();
+        rangeCard.addView(eyebrow("RESUMEN ACTUAL"));
+        rangeCard.addView(gap(7));
+        String from = filters == null ? "" : filters.optString("from", "");
+        String to = filters == null ? "" : filters.optString("to", "");
+        String range = from.isEmpty() ? "Hoy" : (from.equals(to) ? from : from + " → " + to);
+        rangeCard.addView(text(range, 17, TEXT, true));
+        rangeCard.addView(gap(4));
+        rangeCard.addView(text("Datos calculados directamente por API V1 para tu usuario y tienda.", 11, MUTED, false));
+        body.addView(rangeCard);
+
+        addMobileMetricRow(body,
+                mobileMetric("REGISTRADOS", String.valueOf(totals.optInt("registered", 0)), "pedidos"),
+                mobileMetric("RECIBIDOS", String.valueOf(totals.optInt("received", 0)), "pedidos"));
+        addMobileMetricRow(body,
+                mobileMetric("PENDIENTES", String.valueOf(totals.optInt("pending", 0)), "por cerrar"),
+                mobileMetric("CANCELADOS", String.valueOf(totals.optInt("cancelled", 0)), "pedidos"));
+        addMobileMetricRow(body,
+                mobileMetric("VENTA", mobileMoney(totals.optDouble("totalSold", 0)), "sin cancelados"),
+                mobileMetric("EFECTIVIDAD", String.format(Locale.US, "%.1f%%", totals.optDouble("effectiveness", 0)), "recibidos / registrados"));
+
+        LinearLayout monthCard = card();
+        monthCard.addView(eyebrow("MES ACTUAL"));
+        monthCard.addView(gap(9));
+        monthCard.addView(text("Registrados: " + month.optInt("registered", 0), 13, TEXT, true));
+        monthCard.addView(gap(5));
+        monthCard.addView(text("Recibidos: " + month.optInt("received", 0) + "   ·   Pendientes: " + month.optInt("pending", 0), 12, MUTED, false));
+        monthCard.addView(gap(5));
+        monthCard.addView(text("Venta: " + mobileMoney(month.optDouble("totalSold", 0)) + "   ·   Efectividad: " + String.format(Locale.US, "%.1f%%", month.optDouble("effectiveness", 0)), 12, MUTED, false));
+        body.addView(monthCard);
+
+        Button refresh = button("Actualizar indicadores", false);
+        refresh.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { loadDashboard(); }
+        });
+        body.addView(refresh, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+    }
+
+    private void loadOrders() {
+        setPageHeading("PEDIDOS", "Pedidos", "Pedidos reales disponibles para tu usuario.");
+        body.removeAllViews();
+        body.addView(loadingInline("Cargando pedidos…"));
+        api.get("/orders?page=1&page_size=50", bearer, new ApiClient.Callback() {
+            @Override public void onSuccess(final JSONObject json) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() { renderOrders(json); }
+                });
+            }
+
+            @Override public void onError(ApiClient.ApiException error) {
+                handlePrivateError(error, "No se pudieron cargar los pedidos.");
+            }
+        });
+    }
+
+    private TextView mobileStatusBadge(String status) {
+        String clean = mobileValue(status, "SIN ESTADO").toUpperCase(Locale.ROOT);
+        int color = TEXT;
+        int background = Color.rgb(243, 244, 247);
+        if ("RECIBIDO".equals(clean) || "COBRADO".equals(clean)) {
+            color = SUCCESS;
+            background = Color.rgb(235, 250, 242);
+        } else if ("CANCELADO".equals(clean)) {
+            color = DANGER;
+            background = Color.rgb(255, 241, 240);
+        } else if ("ENVIADO".equals(clean) || "AVISADO".equals(clean)) {
+            color = ACCENT;
+            background = ACCENT_SOFT;
+        }
+        TextView badge = text(clean, 9, color, true);
+        badge.setGravity(Gravity.CENTER);
+        badge.setPadding(dp(8), dp(4), dp(8), dp(4));
+        badge.setBackground(rounded(background, Color.TRANSPARENT, 100));
+        return badge;
+    }
+
+    private void renderOrders(JSONObject json) {
+        body.removeAllViews();
+        JSONArray orders = json.optJSONArray("orders");
+        JSONObject pagination = json.optJSONObject("pagination");
+        JSONObject viewer = json.optJSONObject("viewer");
+        int total = pagination == null ? (orders == null ? 0 : orders.length()) : pagination.optInt("total", 0);
+        boolean canSeeAll = viewer != null && viewer.optBoolean("canSeeAllOrders", false);
+
+        LinearLayout summary = card();
+        summary.addView(eyebrow("PEDIDOS DISPONIBLES"));
+        summary.addView(gap(7));
+        summary.addView(text(String.valueOf(total), 28, TEXT, true));
+        summary.addView(gap(2));
+        summary.addView(text(canSeeAll ? "Vista de tienda según tus permisos." : "Mostrando únicamente los pedidos asignados a tu usuario.", 11, MUTED, false));
+        body.addView(summary);
+
+        if (orders == null || orders.length() == 0) {
+            LinearLayout empty = card();
+            empty.addView(text("No hay pedidos para mostrar.", 16, TEXT, true));
+            empty.addView(gap(5));
+            empty.addView(text("API V1 no devolvió pedidos dentro de tu alcance actual.", 12, MUTED, false));
+            body.addView(empty);
+        } else {
+            for (int i = 0; i < orders.length(); i++) {
+                final JSONObject order = orders.optJSONObject(i);
+                if (order == null) continue;
+                final String orderId = order.optString("id", "");
+                String rowId = mobileValue(order.optString("rowId", ""), orderId);
+                String customer = mobileValue(order.optString("customerName", ""), "Cliente");
+                String adviser = mobileValue(order.optString("adviserName", ""), "Sin asesor");
+                JSONObject productSummary = order.optJSONObject("productSummary");
+                String products = productSummary == null ? "Sin productos" : mobileValue(productSummary.optString("names", ""), "Sin productos");
+                int quantity = productSummary == null ? 0 : productSummary.optInt("quantity", 0);
+                JSONObject operationalStore = order.optJSONObject("operationalStore");
+                String storeName = operationalStore == null ? "" : mobileValue(operationalStore.optString("name", ""), "");
+
+                LinearLayout orderCard = card();
+                LinearLayout head = new LinearLayout(this);
+                head.setOrientation(LinearLayout.HORIZONTAL);
+                head.setGravity(Gravity.CENTER_VERTICAL);
+                head.addView(text("#" + rowId, 15, TEXT, true), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                head.addView(mobileStatusBadge(order.optString("status", "")));
+                orderCard.addView(head);
+                orderCard.addView(gap(9));
+                orderCard.addView(text(customer, 16, TEXT, true));
+                orderCard.addView(gap(4));
+                orderCard.addView(text(products + (quantity > 0 ? "  ·  x" + quantity : ""), 12, MUTED, false));
+                orderCard.addView(gap(8));
+
+                LinearLayout foot = new LinearLayout(this);
+                foot.setOrientation(LinearLayout.HORIZONTAL);
+                TextView meta = text(adviser + (storeName.isEmpty() ? "" : "  ·  " + storeName), 10, MUTED, false);
+                meta.setSingleLine(true);
+                meta.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                foot.addView(meta, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                foot.addView(text(mobileMoney(order.optDouble("total", 0)), 13, TEXT, true));
+                orderCard.addView(foot);
+                orderCard.setClickable(true);
+                orderCard.setOnClickListener(new View.OnClickListener() {
+                    @Override public void onClick(View v) {
+                        if (!orderId.isEmpty()) loadOrderDetail(orderId);
+                    }
+                });
+                body.addView(orderCard);
+            }
+        }
+
+        Button refresh = button("Actualizar pedidos", false);
+        refresh.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { loadOrders(); }
+        });
+        body.addView(refresh, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+    }
+
+    private void loadOrderDetail(final String orderId) {
+        currentTab = "orders";
+        setPageHeading("PEDIDOS", "Detalle de pedido", "Información real obtenida de API V1.");
+        body.removeAllViews();
+        body.addView(loadingInline("Cargando pedido…"));
+        api.get("/orders/" + orderId, bearer, new ApiClient.Callback() {
+            @Override public void onSuccess(final JSONObject json) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() { renderOrderDetail(json); }
+                });
+            }
+
+            @Override public void onError(ApiClient.ApiException error) {
+                handlePrivateError(error, "No se pudo cargar el pedido.");
+            }
+        });
+    }
+
+    private void addDetailLine(LinearLayout parent, String label, String value) {
+        String clean = mobileValue(value, "—");
+        parent.addView(text(label, 10, MUTED, true));
+        parent.addView(gap(2));
+        parent.addView(text(clean, 13, TEXT, false));
+        parent.addView(gap(10));
+    }
+
+    private void renderOrderDetail(JSONObject json) {
+        body.removeAllViews();
+        JSONObject order = json.optJSONObject("order");
+        if (order == null) {
+            LinearLayout error = card();
+            error.addView(text("El pedido no devolvió datos.", 16, DANGER, true));
+            body.addView(error);
+            return;
+        }
+
+        String rowId = mobileValue(order.optString("rowId", ""), order.optString("id", ""));
+        LinearLayout heading = card();
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        top.addView(text("Pedido #" + rowId, 21, TEXT, true), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        top.addView(mobileStatusBadge(order.optString("status", "")));
+        heading.addView(top);
+        heading.addView(gap(8));
+        heading.addView(text("Total " + mobileMoney(order.optDouble("total", 0)), 16, TEXT, true));
+        body.addView(heading);
+
+        JSONObject customer = order.optJSONObject("customer");
+        LinearLayout customerCard = card();
+        customerCard.addView(eyebrow("CLIENTE"));
+        customerCard.addView(gap(10));
+        if (customer != null) {
+            addDetailLine(customerCard, "Nombre", customer.optString("name", ""));
+            addDetailLine(customerCard, "Teléfono", customer.optString("phone", ""));
+            addDetailLine(customerCard, "Documento", customer.optString("document", ""));
+            addDetailLine(customerCard, "Dirección", customer.optString("address", ""));
+            addDetailLine(customerCard, "Referencia", customer.optString("reference", ""));
+            String location = mobileValue(customer.optString("district", ""), "");
+            String province = mobileValue(customer.optString("province", ""), "");
+            String department = mobileValue(customer.optString("department", ""), "");
+            String joined = location;
+            if (!province.isEmpty()) joined += (joined.isEmpty() ? "" : ", ") + province;
+            if (!department.isEmpty()) joined += (joined.isEmpty() ? "" : ", ") + department;
+            addDetailLine(customerCard, "Ubicación", joined);
+        }
+        body.addView(customerCard);
+
+        JSONArray items = order.optJSONArray("items");
+        LinearLayout itemsCard = card();
+        itemsCard.addView(eyebrow("PRODUCTOS"));
+        itemsCard.addView(gap(10));
+        if (items != null && items.length() > 0) {
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.optJSONObject(i);
+                if (item == null) continue;
+                LinearLayout line = new LinearLayout(this);
+                line.setOrientation(LinearLayout.HORIZONTAL);
+                TextView name = text(mobileValue(item.optString("name", ""), "Producto") + "  ×" + item.optInt("quantity", 0), 13, TEXT, true);
+                line.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+                if (!item.isNull("subtotal")) line.addView(text(mobileMoney(item.optDouble("subtotal", 0)), 12, TEXT, true));
+                itemsCard.addView(line);
+                if (i < items.length() - 1) itemsCard.addView(gap(10));
+            }
+        } else {
+            itemsCard.addView(text("Sin detalle de productos.", 12, MUTED, false));
+        }
+        body.addView(itemsCard);
+
+        JSONObject delivery = order.optJSONObject("delivery");
+        JSONObject financial = order.optJSONObject("financial");
+        LinearLayout logistics = card();
+        logistics.addView(eyebrow("ENTREGA Y PAGO"));
+        logistics.addView(gap(10));
+        if (delivery != null) {
+            addDetailLine(logistics, "Agencia", delivery.optString("agency", ""));
+            addDetailLine(logistics, "Courier", delivery.optString("courier", ""));
+            JSONObject opStore = delivery.optJSONObject("operationalStore");
+            if (opStore != null) addDetailLine(logistics, "Tienda operativa", opStore.optString("name", ""));
+        }
+        if (financial != null) {
+            if (!financial.isNull("total")) addDetailLine(logistics, "Total", mobileMoney(financial.optDouble("total", 0)));
+            if (!financial.isNull("advance")) addDetailLine(logistics, "Adelanto", mobileMoney(financial.optDouble("advance", 0)));
+            if (!financial.isNull("remaining")) addDetailLine(logistics, "Restante", mobileMoney(financial.optDouble("remaining", 0)));
+        }
+        body.addView(logistics);
+
+        Button back = button("Volver a Pedidos", false);
+        back.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { loadOrders(); }
+        });
+        body.addView(back, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+    }
