@@ -1,0 +1,38 @@
+name: Temporary bump Mobile v0.1.5
+
+on:
+  push:
+    branches:
+      - mobile-app-v1-build
+    paths:
+      - '.github/workflows/tmp-bump-mobile-v015.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bump only mobile version labels
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=.github/workflows/build-dezgre-mobile-apk.yml
+          BEFORE=$(grep -o '0\.1\.4' "$FILE" | wc -l)
+          test "$BEFORE" -gt 0
+          sed -i 's/0\.1\.4/0.1.5/g' "$FILE"
+          AFTER=$(grep -o '0\.1\.5' "$FILE" | wc -l)
+          test "$AFTER" -eq "$BEFORE"
+          ! grep -q '0\.1\.4' "$FILE"
+      - name: Commit isolated version bump
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/tmp-bump-mobile-v015.yml
+          git add .github/workflows/build-dezgre-mobile-apk.yml
+          git commit -m 'build(mobile): prepare exact-panel v0.1.5'
+          git push origin HEAD:mobile-app-v1-build
