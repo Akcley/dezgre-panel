@@ -81,7 +81,7 @@ jobs:
           DEZGRE_PREVIEW_KEY_ALIAS: dezgre-preview
           DEZGRE_PREVIEW_KEY_PASSWORD: dezgre-preview-v1
           DEZGRE_VERSION_CODE: ${{ github.run_number }}
-          DEZGRE_VERSION_NAME: 0.1.1
+          DEZGRE_VERSION_NAME: 0.1.2
         run: gradle :app:assembleDebug --no-daemon --stacktrace
 
       - name: Stage APK checksum and signing certificate
@@ -89,19 +89,19 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/DEZGRE-Mobile-v0.1.1.apk
-          sha256sum dist/DEZGRE-Mobile-v0.1.1.apk | tee dist/DEZGRE-Mobile-v0.1.1.apk.sha256
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/DEZGRE-Mobile-v0.1.1.apk | tee dist/DEZGRE-Mobile-v0.1.1.cert.txt
-          unzip -t dist/DEZGRE-Mobile-v0.1.1.apk >/dev/null
+          cp app/build/outputs/apk/debug/app-debug.apk dist/DEZGRE-Mobile-v0.1.2.apk
+          sha256sum dist/DEZGRE-Mobile-v0.1.2.apk | tee dist/DEZGRE-Mobile-v0.1.2.apk.sha256
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/DEZGRE-Mobile-v0.1.2.apk | tee dist/DEZGRE-Mobile-v0.1.2.cert.txt
+          unzip -t dist/DEZGRE-Mobile-v0.1.2.apk >/dev/null
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DEZGRE-Mobile-v0.1.1
+          name: DEZGRE-Mobile-v0.1.2
           path: |
-            dist/DEZGRE-Mobile-v0.1.1.apk
-            dist/DEZGRE-Mobile-v0.1.1.apk.sha256
-            dist/DEZGRE-Mobile-v0.1.1.cert.txt
+            dist/DEZGRE-Mobile-v0.1.2.apk
+            dist/DEZGRE-Mobile-v0.1.2.apk.sha256
+            dist/DEZGRE-Mobile-v0.1.2.cert.txt
           if-no-files-found: error
           retention-days: 30
 
@@ -110,8 +110,8 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+Akcley@users.noreply.github.com"
-          git add -f dist/DEZGRE-Mobile-v0.1.1.apk dist/DEZGRE-Mobile-v0.1.1.apk.sha256 dist/DEZGRE-Mobile-v0.1.1.cert.txt
+          git add -f dist/DEZGRE-Mobile-v0.1.2.apk dist/DEZGRE-Mobile-v0.1.2.apk.sha256 dist/DEZGRE-Mobile-v0.1.2.cert.txt
           if ! git diff --cached --quiet; then
-            git commit -m "build: publish DEZGRE Mobile v0.1.1 APK [skip ci]"
+            git commit -m "build: publish DEZGRE Mobile v0.1.2 APK [skip ci]"
             git push origin HEAD:mobile-app-v1-build
           fi
