@@ -1,54 +1,46 @@
-                                storeCard.addView(text(store == null ? "—" : store.optString("name", "—"), 22, TEXT, true));
-                                storeCard.addView(gap(5));
-                                storeCard.addView(text(store == null ? "" : store.optString("role", ""), 13, ACCENT, true));
-                                body.addView(storeCard);
-
-                                LinearLayout status = card();
-                                status.addView(text("Estado de la sesión", 13, MUTED, true));
-                                status.addView(gap(8));
-                                status.addView(text("● Bearer activo y protegido", 15, ACCENT, true));
-                                status.addView(gap(4));
-                                status.addView(text("Sin cookies web · Sin acceso a DB · Sin endpoints internos", 13, MUTED, false));
-                                body.addView(status);
-                            }
-                        });
-                    }
-                    @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudo cargar la tienda."); }
-                });
-            }
-            @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudo cargar tu perfil."); }
-        });
-    }
-
     private View loadingInline(String message) {
         LinearLayout row = card();
+        row.setGravity(Gravity.CENTER_HORIZONTAL);
         ProgressBar progress = new ProgressBar(this);
-        row.addView(progress, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        row.addView(progress, new LinearLayout.LayoutParams(dp(34), dp(34)));
         row.addView(gap(8));
-        row.addView(text(message, 14, MUTED, false));
+        TextView label = text(message, 13, MUTED, false);
+        label.setGravity(Gravity.CENTER);
+        row.addView(label);
         return row;
     }
 
-    private void loadProducts() {
-        titleView.setText("Productos");
-        subtitleView.setText("Lectura segura desde /v1/products");
+    private LinearLayout productScopeSelector() {
         LinearLayout selector = new LinearLayout(this);
         selector.setOrientation(LinearLayout.HORIZONTAL);
-        Button bot = button("Catálogo", "bot".equals(currentScope));
-        Button warehouse = button("Almacén", "warehouse".equals(currentScope));
-        LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, dp(48), 1f);
-        half.setMargins(0, 0, dp(5), dp(12));
-        selector.addView(bot, half);
-        LinearLayout.LayoutParams half2 = new LinearLayout.LayoutParams(0, dp(48), 1f);
-        half2.setMargins(dp(5), 0, 0, dp(12));
-        selector.addView(warehouse, half2);
-        body.addView(selector);
+        selector.setPadding(dp(3), dp(3), dp(3), dp(3));
+        selector.setBackground(rounded(SURFACE, BORDER, 12));
+        TextView bot = segmentedButton("Catálogo", "bot".equals(currentScope));
+        TextView warehouse = segmentedButton("Almacén", "warehouse".equals(currentScope));
+        selector.addView(bot, new LinearLayout.LayoutParams(0, dp(44), 1f));
+        selector.addView(warehouse, new LinearLayout.LayoutParams(0, dp(44), 1f));
         bot.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { currentScope = "bot"; showMain("products"); }
         });
         warehouse.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { currentScope = "warehouse"; showMain("products"); }
         });
+        return selector;
+    }
+
+    private TextView segmentedButton(String label, boolean selected) {
+        TextView view = text(label, 13, selected ? Color.WHITE : TEXT, true);
+        view.setGravity(Gravity.CENTER);
+        view.setBackground(rounded(selected ? ACCENT : Color.TRANSPARENT, Color.TRANSPARENT, 9));
+        view.setClickable(true);
+        return view;
+    }
+
+    private void loadProducts() {
+        setPageHeading("OPERACIÓN", "Productos", "Data de producto disponible mediante Bubble API V1.");
+        body.removeAllViews();
+        body.addView(productScopeSelector());
+        body.addView(gap(14));
         body.addView(loadingInline("Cargando productos…"));
         api.get("/products?scope=" + currentScope, bearer, new ApiClient.Callback() {
             @Override public void onSuccess(final JSONObject json) {
@@ -62,24 +54,68 @@
 
     private void renderProducts(JSONArray products) {
         body.removeAllViews();
-        LinearLayout selector = new LinearLayout(this);
-        selector.setOrientation(LinearLayout.HORIZONTAL);
-        Button bot = button("Catálogo", "bot".equals(currentScope));
-        Button warehouse = button("Almacén", "warehouse".equals(currentScope));
-        selector.addView(bot, new LinearLayout.LayoutParams(0, dp(48), 1f));
-        selector.addView(warehouse, new LinearLayout.LayoutParams(0, dp(48), 1f));
-        body.addView(selector);
-        body.addView(gap(14));
-        bot.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { currentScope = "bot"; showMain("products"); } });
-        warehouse.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { currentScope = "warehouse"; showMain("products"); } });
+        body.addView(productScopeSelector());
+        body.addView(gap(16));
         int count = products == null ? 0 : products.length();
-        body.addView(text(count + (count == 1 ? " producto" : " productos"), 13, MUTED, true));
-        body.addView(gap(10));
+        body.addView(text(count + (count == 1 ? " producto" : " productos"), 12, MUTED, true));
+        body.addView(gap(8));
         if (count == 0) {
             LinearLayout empty = card();
             empty.addView(text("No hay productos en este alcance.", 16, TEXT, true));
+            empty.addView(gap(5));
+            empty.addView(text("Cambia entre Catálogo y Almacén para consultar otro alcance.", 12, MUTED, false));
             body.addView(empty);
             return;
         }
         for (int i = 0; i < count; i++) {
             final JSONObject product = products.optJSONObject(i);
+            if (product == null) continue;
+            LinearLayout item = card();
+            item.setPadding(dp(12), dp(12), dp(12), dp(12));
+
+            LinearLayout identity = new LinearLayout(this);
+            identity.setOrientation(LinearLayout.HORIZONTAL);
+            identity.setGravity(Gravity.CENTER_VERTICAL);
+
+            String name = product.optString("name", "Producto");
+            TextView thumb = text(safeInitial(name), 21, ACCENT, true);
+            thumb.setGravity(Gravity.CENTER);
+            thumb.setBackground(rounded(Color.rgb(244, 241, 246), BORDER, 10));
+            identity.addView(thumb, new LinearLayout.LayoutParams(dp(68), dp(68)));
+
+            LinearLayout copy = new LinearLayout(this);
+            copy.setOrientation(LinearLayout.VERTICAL);
+            copy.setPadding(dp(13), 0, dp(8), 0);
+            copy.addView(text(name, 16, TEXT, true));
+            String category = product.optString("category", "");
+            if (!category.isEmpty() && !"null".equals(category)) {
+                copy.addView(gap(4));
+                copy.addView(text(category, 11, MUTED, false));
+            }
+            identity.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            TextView chevron = text("›", 28, Color.rgb(80, 88, 111), false);
+            chevron.setGravity(Gravity.CENTER);
+            identity.addView(chevron, new LinearLayout.LayoutParams(dp(30), dp(52)));
+            item.addView(identity);
+
+            item.addView(gap(10));
+            LinearLayout meta = new LinearLayout(this);
+            meta.setOrientation(LinearLayout.HORIZONTAL);
+            meta.setGravity(Gravity.CENTER_VERTICAL);
+            meta.addView(text(price(product.optDouble("price", 0)), 15, SUCCESS, true), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            int stock = product.optInt("stock", 0);
+            meta.addView(text("Stock: " + stock, 12, stock > 0 ? MUTED : DANGER, true));
+            item.addView(meta);
+
+            item.setClickable(true);
+            item.setForeground(getDrawable(android.R.drawable.list_selector_background));
+            item.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { loadProductDetail(product.optString("id", "")); }
+            });
+            body.addView(item);
+        }
+    }
+
+    private String price(double amount) {
+        return String.format(Locale.US, "S/ %.2f", amount);
+    }
