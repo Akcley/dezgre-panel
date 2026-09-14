@@ -43,6 +43,43 @@
         }
         body.addView(accessCard);
 
+        final String notificationStoreId = current == null ? "current" : current.optString("id", "current");
+        LinearLayout notificationCard = card();
+        TextView notificationTitle = text("Notificaciones", 17, TEXT, true);
+        notificationTitle.setTextColor(Color.rgb(177, 68, 178));
+        notificationCard.addView(notificationTitle);
+        notificationCard.addView(gap(7));
+        notificationCard.addView(text("Motor Android listo · configuración separada por tienda y tipo de evento.", 14, TEXT, false));
+        notificationCard.addView(gap(7));
+        notificationCard.addView(text("Permiso Android: " + DezgreNotificationManager.permissionLabel(this), 13,
+                DezgreNotificationManager.hasPermission(this) ? ACCENT : MUTED, true));
+        notificationCard.addView(gap(4));
+        notificationCard.addView(text("Sonidos personalizados: preparados para sincronizar enabled, MP3 y revisión desde API V1 sin recompilar la app.", 12, MUTED, false));
+        notificationCard.addView(gap(12));
+        final TextView notificationStatus = text(
+                "La prueba local valida Android. El push remoto se activará cuando V1 entregue registro de dispositivo + configuración de eventos.",
+                12, MUTED, false);
+        notificationCard.addView(notificationStatus);
+        notificationCard.addView(gap(10));
+        Button testNotification = button(
+                DezgreNotificationManager.hasPermission(this) ? "Probar notificación" : "Activar notificaciones",
+                false
+        );
+        testNotification.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                boolean shown = DezgreNotificationManager.showTest(MainActivity.this, notificationStoreId);
+                if (shown) {
+                    notificationStatus.setText("Prueba enviada. Si apareció fuera de la app, el motor Android está funcionando.");
+                    notificationStatus.setTextColor(ACCENT);
+                } else {
+                    notificationStatus.setText("Android solicitó permiso. Acéptalo y vuelve a tocar Probar notificación.");
+                    notificationStatus.setTextColor(MUTED);
+                }
+            }
+        });
+        notificationCard.addView(testNotification);
+        body.addView(notificationCard);
+
         Button logout = button("Cerrar sesión en este dispositivo", false);
         logout.setTextColor(DANGER);
         logout.setOnClickListener(new View.OnClickListener() {
