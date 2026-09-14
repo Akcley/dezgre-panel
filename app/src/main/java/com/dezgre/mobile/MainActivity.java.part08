@@ -1,2 +1,256 @@
 
+    private LinearLayout metricCard(String label, String value, int valueColor) {
+        LinearLayout metric = card();
+        metric.setPadding(dp(14), dp(13), dp(14), dp(13));
+        metric.addView(text(label, 11, MUTED, true));
+        metric.addView(gap(5));
+        metric.addView(text(value, 24, valueColor, true));
+        return metric;
+    }
+
+    private void loadDashboard() {
+        setPageHeading("MI PANEL", "Resumen operativo", "Datos reales disponibles mediante API V1.");
+        body.removeAllViews();
+        body.addView(loadingInline("Cargando resumen…"));
+        api.get("/dashboard/summary", bearer, new ApiClient.Callback() {
+            @Override public void onSuccess(final JSONObject json) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() { renderDashboard(json); }
+                });
+            }
+            @Override public void onError(ApiClient.ApiException error) {
+                handlePrivateError(error, "No se pudo cargar Mi Panel.");
+            }
+        });
+    }
+
+    private void renderDashboard(JSONObject json) {
+        body.removeAllViews();
+        JSONObject totals = json == null ? null : json.optJSONObject("totals");
+        JSONObject month = json == null ? null : json.optJSONObject("month");
+        if (totals == null) {
+            LinearLayout empty = card();
+            empty.addView(text("El resumen no devolvió métricas.", 16, TEXT, true));
+            body.addView(empty);
+            return;
+        }
+
+        body.addView(text("Periodo actual", 13, TEXT, true));
+        body.addView(gap(9));
+        LinearLayout row1 = new LinearLayout(this);
+        row1.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout registered = metricCard("REGISTRADOS", String.valueOf(totals.optInt("registered", 0)), TEXT);
+        LinearLayout received = metricCard("RECIBIDOS", String.valueOf(totals.optInt("received", 0)), SUCCESS);
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        left.setMargins(0, 0, dp(6), 0);
+        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        right.setMargins(dp(6), 0, 0, 0);
+        row1.addView(registered, left);
+        row1.addView(received, right);
+        body.addView(row1);
+
+        LinearLayout row2 = new LinearLayout(this);
+        row2.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout pending = metricCard("PENDIENTES", String.valueOf(totals.optInt("pending", 0)), TEXT);
+        LinearLayout cancelled = metricCard("CANCELADOS", String.valueOf(totals.optInt("cancelled", 0)), DANGER);
+        row2.addView(pending, left);
+        row2.addView(cancelled, right);
+        body.addView(row2);
+
+        LinearLayout money = card();
+        money.addView(text("VENTA DEL PERIODO", 11, MUTED, true));
+        money.addView(gap(5));
+        money.addView(text(price(totals.optDouble("totalSold", 0)), 27, SUCCESS, true));
+        money.addView(gap(6));
+        money.addView(text("Efectividad: " + String.format(Locale.US, "%.1f%%", totals.optDouble("effectiveness", 0)), 13, TEXT, true));
+        body.addView(money);
+
+        if (month != null) {
+            LinearLayout monthCard = card();
+            monthCard.addView(eyebrow("MES ACTUAL"));
+            monthCard.addView(gap(8));
+            monthCard.addView(text(month.optInt("registered", 0) + " pedidos registrados", 15, TEXT, true));
+            monthCard.addView(gap(4));
+            monthCard.addView(text(month.optInt("received", 0) + " recibidos · " + month.optInt("pending", 0) + " pendientes", 12, MUTED, false));
+            monthCard.addView(gap(8));
+            monthCard.addView(text(price(month.optDouble("totalSold", 0)), 20, SUCCESS, true));
+            body.addView(monthCard);
+        }
+    }
+
+    private void loadOrders() {
+        setPageHeading("OPERACIÓN", "Pedidos", "Pedidos reales disponibles mediante API V1.");
+        body.removeAllViews();
+        body.addView(loadingInline("Cargando pedidos…"));
+        api.get("/orders?page=1&page_size=50", bearer, new ApiClient.Callback() {
+            @Override public void onSuccess(final JSONObject json) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() { renderOrders(json); }
+                });
+            }
+            @Override public void onError(ApiClient.ApiException error) {
+                handlePrivateError(error, "No se pudieron cargar los pedidos.");
+            }
+        });
+    }
+
+    private String nullableText(JSONObject object, String key, String fallback) {
+        if (object == null || object.isNull(key)) return fallback;
+        String value = object.optString(key, "").trim();
+        return value.isEmpty() || "null".equalsIgnoreCase(value) ? fallback : value;
+    }
+
+    private void renderOrders(JSONObject json) {
+        body.removeAllViews();
+        JSONArray orders = json == null ? null : json.optJSONArray("orders");
+        JSONObject pagination = json == null ? null : json.optJSONObject("pagination");
+        int count = orders == null ? 0 : orders.length();
+        int total = pagination == null ? count : pagination.optInt("total", count);
+
+        LinearLayout summary = card();
+        summary.addView(text(total + (total == 1 ? " pedido" : " pedidos"), 18, TEXT, true));
+        summary.addView(gap(4));
+        summary.addView(text("Mostrando los " + count + " más recientes permitidos para tu usuario.", 12, MUTED, false));
+        body.addView(summary);
+
+        if (count == 0) {
+            LinearLayout empty = card();
+            empty.addView(text("No hay pedidos para mostrar.", 16, TEXT, true));
+            empty.addView(gap(5));
+            empty.addView(text("La API respeta automáticamente tu rol y el alcance de la tienda.", 12, MUTED, false));
+            body.addView(empty);
+            return;
+        }
+
+        for (int i = 0; i < count; i++) {
+            final JSONObject order = orders.optJSONObject(i);
+            if (order == null) continue;
+            final String id = order.optString("id", "");
+            LinearLayout item = card();
+            item.setPadding(dp(14), dp(13), dp(14), dp(13));
+
+            LinearLayout top = new LinearLayout(this);
+            top.setOrientation(LinearLayout.HORIZONTAL);
+            top.setGravity(Gravity.CENTER_VERTICAL);
+            top.addView(text("Pedido #" + id, 16, TEXT, true), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            String status = nullableText(order, "status", "SIN ESTADO");
+            TextView statusView = text(status, 10, "CANCELADO".equalsIgnoreCase(status) ? DANGER : ACCENT, true);
+            statusView.setPadding(dp(8), dp(4), dp(8), dp(4));
+            statusView.setBackground(rounded(ACCENT_SOFT, Color.TRANSPARENT, 100));
+            top.addView(statusView);
+            item.addView(top);
+
+            item.addView(gap(8));
+            item.addView(text(nullableText(order, "customerName", "Cliente"), 14, TEXT, true));
+            JSONObject productSummary = order.optJSONObject("productSummary");
+            String products = productSummary == null ? "" : nullableText(productSummary, "names", "");
+            if (!products.isEmpty()) {
+                item.addView(gap(4));
+                item.addView(text(products, 12, MUTED, false));
+            }
+            item.addView(gap(8));
+            LinearLayout bottom = new LinearLayout(this);
+            bottom.setOrientation(LinearLayout.HORIZONTAL);
+            bottom.setGravity(Gravity.CENTER_VERTICAL);
+            bottom.addView(text(price(order.optDouble("total", 0)), 15, SUCCESS, true), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            bottom.addView(text("Ver detalle  ›", 12, ACCENT, true));
+            item.addView(bottom);
+            item.setClickable(true);
+            item.setForeground(getDrawable(android.R.drawable.list_selector_background));
+            item.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { loadOrderDetail(id); }
+            });
+            body.addView(item);
+        }
+    }
+
+    private void loadOrderDetail(final String orderId) {
+        if (orderId == null || orderId.trim().isEmpty()) return;
+        currentTab = "orders";
+        setPageHeading("PEDIDOS", "Pedido #" + orderId, "Detalle real del pedido mediante API V1.");
+        body.removeAllViews();
+        body.addView(loadingInline("Cargando detalle…"));
+        api.get("/orders/" + orderId, bearer, new ApiClient.Callback() {
+            @Override public void onSuccess(final JSONObject json) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() { renderOrderDetail(json.optJSONObject("order")); }
+                });
+            }
+            @Override public void onError(ApiClient.ApiException error) {
+                handlePrivateError(error, "No se pudo cargar el detalle del pedido.");
+            }
+        });
+    }
+
+    private void addDetailLine(LinearLayout parent, String label, String value) {
+        parent.addView(text(label, 10, MUTED, true));
+        parent.addView(gap(3));
+        parent.addView(text(value == null || value.trim().isEmpty() ? "—" : value, 13, TEXT, false));
+        parent.addView(gap(11));
+    }
+
+    private void renderOrderDetail(JSONObject order) {
+        body.removeAllViews();
+        if (order == null) {
+            LinearLayout empty = card();
+            empty.addView(text("No se recibió el detalle del pedido.", 16, DANGER, true));
+            body.addView(empty);
+            return;
+        }
+
+        Button back = button("‹ Volver a pedidos", false);
+        back.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { loadOrders(); }
+        });
+        body.addView(back, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+        body.addView(gap(12));
+
+        LinearLayout stateCard = card();
+        stateCard.addView(text("Pedido #" + order.optString("id", ""), 20, TEXT, true));
+        stateCard.addView(gap(5));
+        stateCard.addView(text(nullableText(order, "status", "SIN ESTADO"), 12, ACCENT, true));
+        stateCard.addView(gap(8));
+        stateCard.addView(text(price(order.optDouble("total", 0)), 24, SUCCESS, true));
+        body.addView(stateCard);
+
+        JSONObject customer = order.optJSONObject("customer");
+        LinearLayout customerCard = card();
+        customerCard.addView(eyebrow("CLIENTE"));
+        customerCard.addView(gap(10));
+        addDetailLine(customerCard, "NOMBRE", nullableText(customer, "name", "—"));
+        addDetailLine(customerCard, "TELÉFONO", nullableText(customer, "phone", "—"));
+        addDetailLine(customerCard, "DIRECCIÓN", nullableText(customer, "address", "—"));
+        addDetailLine(customerCard, "DISTRITO", nullableText(customer, "district", "—"));
+        addDetailLine(customerCard, "REFERENCIA", nullableText(customer, "reference", "—"));
+        body.addView(customerCard);
+
+        JSONObject delivery = order.optJSONObject("delivery");
+        LinearLayout deliveryCard = card();
+        deliveryCard.addView(eyebrow("ENTREGA"));
+        deliveryCard.addView(gap(10));
+        addDetailLine(deliveryCard, "AGENCIA", nullableText(delivery, "agency", "—"));
+        addDetailLine(deliveryCard, "COURIER", nullableText(delivery, "courier", "—"));
+        JSONObject opStore = delivery == null ? null : delivery.optJSONObject("operationalStore");
+        addDetailLine(deliveryCard, "TIENDA / SEDE", nullableText(opStore, "name", "—"));
+        body.addView(deliveryCard);
+
+        JSONArray items = order.optJSONArray("items");
+        LinearLayout itemsCard = card();
+        itemsCard.addView(eyebrow("PRODUCTOS"));
+        itemsCard.addView(gap(10));
+        if (items != null) {
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.optJSONObject(i);
+                if (item == null) continue;
+                String name = nullableText(item, "name", "Producto");
+                int quantity = item.optInt("quantity", 0);
+                double subtotal = item.optDouble("subtotal", 0);
+                itemsCard.addView(text(name, 13, TEXT, true));
+                itemsCard.addView(gap(3));
+                itemsCard.addView(text("Cantidad: " + quantity + " · " + price(subtotal), 11, MUTED, false));
+                if (i < items.length() - 1) itemsCard.addView(gap(12));
+            }
+        }
+        body.addView(itemsCard);
+    }
 }
