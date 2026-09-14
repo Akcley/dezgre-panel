@@ -40,6 +40,8 @@
         final String email = user == null ? "" : user.optString("email", "");
         final String role = current == null ? currentUserRole : current.optString("role", currentUserRole);
         final String webDomain = selectedStoreDomain(current, stores);
+        String profileAvatar = resolveUserAvatar(user);
+        if (!profileAvatar.isEmpty()) currentUserAvatar = profileAvatar;
 
         LinearLayout accountCard = card();
         LinearLayout avatarBlock = new LinearLayout(this);
@@ -48,10 +50,7 @@
         avatarBlock.setPadding(dp(14), dp(14), dp(14), dp(14));
         avatarBlock.setBackground(rounded(Color.WHITE, BORDER, 12));
 
-        TextView avatar = text(safeInitial(userName), 20, Color.WHITE, true);
-        avatar.setGravity(Gravity.CENTER);
-        avatar.setBackground(rounded(Color.rgb(75, 77, 84), Color.TRANSPARENT, 100));
-        avatarBlock.addView(avatar, new LinearLayout.LayoutParams(dp(64), dp(64)));
+        avatarBlock.addView(userAvatarView(userName, currentUserAvatar, 64, 20));
 
         LinearLayout avatarCopy = new LinearLayout(this);
         avatarCopy.setOrientation(LinearLayout.VERTICAL);
@@ -200,6 +199,7 @@
             @Override public void onClick(View v) {
                 tokenStore.clear();
                 bearer = null;
+                currentUserAvatar = "";
                 showLogin(null);
             }
         });
@@ -207,7 +207,7 @@
         body.addView(sessionCard);
         body.addView(gap(8));
 
-        String versionName = "0.1.2-preview";
+        String versionName = "0.1.3-preview";
         long versionCode = 0;
         try {
             android.content.pm.PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
@@ -229,6 +229,7 @@
                 if (error.status == 401 || error.status == 403) {
                     tokenStore.clear();
                     bearer = null;
+                    currentUserAvatar = "";
                     showLogin("Tu sesión expiró o ya no tiene acceso.");
                     return;
                 }
@@ -258,4 +259,3 @@
             }
         } catch (Exception ignored) {}
     }
-}
