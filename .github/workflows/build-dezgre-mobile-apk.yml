@@ -30,14 +30,14 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android 35
+      - name: Install Android 35 from runner SDK
         shell: bash
         run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          test -x "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" || command -v sdkmanager
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
       - name: Restore stable preview signing key
         id: preview-signing-cache
@@ -108,7 +108,7 @@ jobs:
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+Akcley@users.noreply.github.com"
           git add -f dist/DEZGRE-Mobile-v0.1.1.apk dist/DEZGRE-Mobile-v0.1.1.apk.sha256 dist/DEZGRE-Mobile-v0.1.1.cert.txt
           if ! git diff --cached --quiet; then
             git commit -m "build: publish DEZGRE Mobile v0.1.1 APK [skip ci]"
