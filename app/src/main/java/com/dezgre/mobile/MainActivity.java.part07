@@ -207,13 +207,17 @@
         body.addView(sessionCard);
         body.addView(gap(8));
 
-        String versionName = BuildConfig.VERSION_NAME;
-        long versionCode;
-        if (android.os.Build.VERSION.SDK_INT >= 28) {
-            versionCode = getPackageManager().getPackageInfo(getPackageName(), 0).getLongVersionCode();
-        } else {
-            versionCode = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
-        }
+        String versionName = "0.1.2-preview";
+        long versionCode = 0;
+        try {
+            android.content.pm.PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
+            if (info.versionName != null && !info.versionName.trim().isEmpty()) versionName = info.versionName;
+            if (android.os.Build.VERSION.SDK_INT >= 28) {
+                versionCode = info.getLongVersionCode();
+            } else {
+                versionCode = info.versionCode;
+            }
+        } catch (Exception ignored) {}
         TextView version = text("DEZGRE Mobile " + versionName + " · build " + versionCode, 10, MUTED, false);
         version.setGravity(Gravity.CENTER);
         body.addView(version);
