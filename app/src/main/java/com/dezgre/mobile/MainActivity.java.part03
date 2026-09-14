@@ -77,7 +77,7 @@
             LinearLayout topRow = new LinearLayout(this);
             topRow.setOrientation(LinearLayout.HORIZONTAL);
             topRow.setGravity(Gravity.CENTER_VERTICAL);
-            TextView avatar = text(store.optString("name", "T").substring(0, 1).toUpperCase(Locale.ROOT), 18, Color.WHITE, true);
+            TextView avatar = text(safeInitial(store.optString("name", "Tienda")), 18, Color.WHITE, true);
             avatar.setGravity(Gravity.CENTER);
             avatar.setBackground(rounded(ACCENT, Color.TRANSPARENT, 10));
             topRow.addView(avatar, new LinearLayout.LayoutParams(dp(44), dp(44)));
