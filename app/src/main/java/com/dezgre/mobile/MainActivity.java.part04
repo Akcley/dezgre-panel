@@ -90,7 +90,8 @@
 
         if ("products".equals(tab)) loadProducts();
         else if ("profile".equals(tab)) loadProfile();
-        else loadHome();
+        else if ("home".equals(tab)) loadHome();
+        else showUnavailableSection(tab);
     }
 
     private void setPageHeading(String eyebrow, String title, String subtitle) {
@@ -145,15 +146,15 @@
         brandRow.addView(close, new LinearLayout.LayoutParams(dp(40), dp(44)));
         drawer.addView(brandRow);
 
-        drawer.addView(drawerUnavailableItem("↔", "Conexiones"));
-        drawer.addView(drawerUnavailableItem("✉", "Mensajes"));
-        drawer.addView(drawerItem("⌂", "Inicio", "home", "home".equals(currentTab)));
-        drawer.addView(drawerItem("▦", "Mi Panel", "home", false));
-        drawer.addView(drawerItem("▤", "Productos", "products", "products".equals(currentTab)));
-        drawer.addView(drawerUnavailableItem("◈", "Vendedora IA"));
-        drawer.addView(drawerUnavailableItem("▣", "Pedidos"));
-        drawer.addView(drawerUnavailableItem("⚙", "Configuración"));
-        drawer.addView(drawerUnavailableItem("◇", "Mi tienda / Web"));
+        drawer.addView(drawerItem(R.drawable.ic_nav_connections, "Conexiones", "connections", "connections".equals(currentTab)));
+        drawer.addView(drawerItem(R.drawable.ic_nav_messages, "Mensajes", "messages", "messages".equals(currentTab)));
+        drawer.addView(drawerItem(R.drawable.ic_nav_home, "Inicio", "home", "home".equals(currentTab)));
+        drawer.addView(drawerItem(R.drawable.ic_nav_panel, "Mi Panel", "panel", "panel".equals(currentTab)));
+        drawer.addView(drawerItem(R.drawable.ic_nav_products, "Productos", "products", "products".equals(currentTab)));
+        drawer.addView(drawerItem(R.drawable.ic_nav_seller, "Vendedora IA", "seller", "seller".equals(currentTab)));
+        drawer.addView(drawerItem(R.drawable.ic_nav_orders, "Pedidos", "orders", "orders".equals(currentTab)));
+        drawer.addView(drawerItem(R.drawable.ic_nav_settings, "Configuración", "settings", "settings".equals(currentTab)));
+        drawer.addView(drawerItem(R.drawable.ic_nav_storefront, "Mi tienda / Web", "storefront", "storefront".equals(currentTab)));
 
         View spacer = new View(this);
         drawer.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
@@ -163,10 +164,7 @@
         account.setGravity(Gravity.CENTER_VERTICAL);
         account.setPadding(dp(11), dp(10), dp(11), dp(10));
         account.setBackground(rounded(PANEL_DARK_2, Color.rgb(56, 56, 61), 12));
-        TextView avatar = text(safeInitial(currentUserName), 14, Color.WHITE, true);
-        avatar.setGravity(Gravity.CENTER);
-        avatar.setBackground(rounded(Color.rgb(75, 77, 84), Color.rgb(91, 93, 101), 100));
-        account.addView(avatar, new LinearLayout.LayoutParams(dp(34), dp(34)));
+        account.addView(userAvatarView(currentUserName, currentUserAvatar, 34, 14));
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.setPadding(dp(9), 0, 0, 0);
@@ -185,11 +183,25 @@
         drawer.addView(account, accountParams);
     }
 
-    private TextView drawerItem(String icon, String label, final String tab, boolean active) {
-        TextView item = text(icon + "   " + label, 13, active ? Color.WHITE : Color.rgb(215, 215, 220), active);
+    private LinearLayout drawerItem(int iconRes, String label, final String tab, boolean active) {
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.HORIZONTAL);
         item.setGravity(Gravity.CENTER_VERTICAL);
-        item.setPadding(dp(14), dp(9), dp(14), dp(9));
+        item.setPadding(dp(14), dp(8), dp(14), dp(8));
         item.setBackground(rounded(active ? PANEL_DARK_ACTIVE : Color.TRANSPARENT, Color.TRANSPARENT, 9));
+
+        ImageView icon = new ImageView(this);
+        icon.setImageResource(iconRes);
+        icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        icon.setColorFilter(active ? Color.WHITE : Color.rgb(205, 205, 211));
+        item.addView(icon, new LinearLayout.LayoutParams(dp(20), dp(20)));
+
+        TextView labelView = text(label, 13, active ? Color.WHITE : Color.rgb(215, 215, 220), active);
+        labelView.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f);
+        labelParams.setMargins(dp(14), 0, 0, 0);
+        item.addView(labelView, labelParams);
+
         item.setClickable(true);
         item.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) { closeDrawer(); showMain(tab); }
@@ -200,38 +212,30 @@
         return item;
     }
 
-    private TextView drawerUnavailableItem(String icon, final String label) {
-        TextView item = text(icon + "   " + label, 13, Color.rgb(205, 205, 211), false);
-        item.setGravity(Gravity.CENTER_VERTICAL);
-        item.setPadding(dp(14), dp(9), dp(14), dp(9));
-        item.setBackground(rounded(Color.TRANSPARENT, Color.TRANSPARENT, 9));
-        item.setClickable(true);
-        item.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) {
-                closeDrawer();
-                showUnavailableSection(label);
-            }
-        });
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42));
-        params.setMargins(dp(8), dp(1), dp(8), dp(1));
-        item.setLayoutParams(params);
-        return item;
-    }
+    private void showUnavailableSection(String tab) {
+        String label;
+        String subtitle;
+        if ("connections".equals(tab)) { label = "Conexiones"; subtitle = "Canales e integraciones de tu tienda."; }
+        else if ("messages".equals(tab)) { label = "Mensajes"; subtitle = "Conversaciones y atención de clientes."; }
+        else if ("panel".equals(tab)) { label = "Mi Panel"; subtitle = "Resumen operativo de la tienda."; }
+        else if ("seller".equals(tab)) { label = "Vendedora IA"; subtitle = "Configuración y operación de tu vendedora."; }
+        else if ("orders".equals(tab)) { label = "Pedidos"; subtitle = "Gestión de pedidos de la tienda."; }
+        else if ("settings".equals(tab)) { label = "Configuración"; subtitle = "Usuarios, permisos y preferencias."; }
+        else if ("storefront".equals(tab)) { label = "Mi tienda / Web"; subtitle = "Contenido y apariencia de tu tienda."; }
+        else { label = "DEZGRE"; subtitle = "Módulo móvil."; }
 
-    private void showUnavailableSection(String label) {
-        currentTab = "section";
-        setPageHeading("DEZGRE", label, "Módulo del panel web.");
+        setPageHeading("DEZGRE", label, subtitle);
         body.removeAllViews();
         LinearLayout moduleCard = card();
         moduleCard.addView(text(label, 20, TEXT, true));
         moduleCard.addView(gap(7));
-        moduleCard.addView(text("Esta sección forma parte de DEZGRE y ya existe en el panel web. La activaremos aquí cuando API V1 publique sus operaciones móviles para no duplicar lógica ni mostrar datos falsos.", 13, MUTED, false));
+        moduleCard.addView(text("Esta sección ya existe en DEZGRE Web. En Mobile quedará operativa cuando su contrato público esté disponible en API V1; mientras tanto permanece separada para no mezclarla con Inicio ni inventar datos.", 13, MUTED, false));
         moduleCard.addView(gap(14));
-        Button back = button("Volver al Inicio", false);
-        back.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { showMain("home"); }
+        Button menuButton = button("Abrir menú", false);
+        menuButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { openDrawer(); }
         });
-        moduleCard.addView(back);
+        moduleCard.addView(menuButton);
         body.addView(moduleCard);
     }
 
