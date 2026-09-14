@@ -1,0 +1,95 @@
+        subtitleView.setText("Identidad y accesos V1");
+        body.addView(loadingInline("Cargando perfil…"));
+        api.get("/me", bearer, new ApiClient.Callback() {
+            @Override public void onSuccess(final JSONObject me) {
+                api.get("/stores", bearer, new ApiClient.Callback() {
+                    @Override public void onSuccess(final JSONObject stores) {
+                        runOnUiThread(new Runnable() {
+                            @Override public void run() { renderProfile(me, stores.optJSONArray("stores")); }
+                        });
+                    }
+                    @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudieron cargar tus tiendas."); }
+                });
+            }
+            @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudo cargar el perfil."); }
+        });
+    }
+
+    private void renderProfile(JSONObject me, JSONArray stores) {
+        body.removeAllViews();
+        JSONObject user = me.optJSONObject("user");
+        JSONObject current = me.optJSONObject("store");
+        LinearLayout userCard = card();
+        userCard.addView(text(user == null ? "Usuario" : user.optString("name", "Usuario"), 23, TEXT, true));
+        userCard.addView(gap(5));
+        userCard.addView(text(user == null ? "" : user.optString("email", ""), 14, MUTED, false));
+        userCard.addView(gap(9));
+        userCard.addView(text(current == null ? "" : current.optString("role", ""), 13, ACCENT, true));
+        body.addView(userCard);
+
+        LinearLayout accessCard = card();
+        accessCard.addView(text("Tiendas con acceso", 15, TEXT, true));
+        accessCard.addView(gap(10));
+        if (stores != null) {
+            for (int i = 0; i < stores.length(); i++) {
+                JSONObject store = stores.optJSONObject(i);
+                if (store == null) continue;
+                String prefix = store.optBoolean("selected", false) ? "● " : "○ ";
+                TextView line = text(prefix + store.optString("name", "Tienda") + " · " + store.optString("role", ""), 14,
+                        store.optBoolean("selected", false) ? ACCENT : TEXT, store.optBoolean("selected", false));
+                accessCard.addView(line);
+                if (i < stores.length() - 1) accessCard.addView(gap(8));
+            }
+        }
+        body.addView(accessCard);
+
+        Button logout = button("Cerrar sesión en este dispositivo", false);
+        logout.setTextColor(DANGER);
+        logout.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                tokenStore.clear();
+                bearer = null;
+                showLogin(null);
+            }
+        });
+        body.addView(logout);
+        body.addView(gap(10));
+        body.addView(text("DEZGRE Mobile 0.1.0 · API https://api.dezgre.com/v1", 11, MUTED, false));
+    }
+
+    private void handlePrivateError(final ApiClient.ApiException error, final String fallback) {
+        runOnUiThread(new Runnable() {
+            @Override public void run() {
+                if (error.status == 401 || error.status == 403) {
+                    tokenStore.clear();
+                    bearer = null;
+                    showLogin("Tu sesión expiró o ya no tiene acceso.");
+                    return;
+                }
+                if (body != null) {
+                    body.removeAllViews();
+                    LinearLayout errorCard = card();
+                    errorCard.addView(text(fallback, 17, DANGER, true));
+                    errorCard.addView(gap(6));
+                    errorCard.addView(text(error.getMessage(), 13, MUTED, false));
+                    body.addView(errorCard);
+                    Button retry = button("Reintentar", true);
+                    retry.setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) { showMain("home"); }
+                    });
+                    body.addView(retry);
+                }
+            }
+        });
+    }
+
+    private void hideKeyboard() {
+        try {
+            View focus = getCurrentFocus();
+            if (focus != null) {
+                InputMethodManager manager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                manager.hideSoftInputFromWindow(focus.getWindowToken(), 0);
+            }
+        } catch (Exception ignored) {}
+    }
+}

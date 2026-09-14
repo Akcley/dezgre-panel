@@ -1,0 +1,134 @@
+package com.dezgre.mobile;
+
+import android.app.Activity;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.os.Bundle;
+import android.text.InputType;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.inputmethod.InputMethodManager;
+import android.content.Context;
+import android.graphics.drawable.GradientDrawable;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.ScrollView;
+import android.widget.Space;
+import android.widget.TextView;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.Locale;
+
+public final class MainActivity extends Activity {
+    private static final int BG = Color.rgb(246, 248, 251);
+    private static final int SURFACE = Color.WHITE;
+    private static final int TEXT = Color.rgb(17, 24, 39);
+    private static final int MUTED = Color.rgb(107, 114, 128);
+    private static final int ACCENT = Color.rgb(15, 163, 127);
+    private static final int BORDER = Color.rgb(226, 232, 240);
+    private static final int DANGER = Color.rgb(190, 24, 93);
+
+    private ApiClient api;
+    private SecureTokenStore tokenStore;
+    private String bearer;
+    private String currentScope = "bot";
+    private LinearLayout root;
+    private LinearLayout body;
+    private TextView titleView;
+    private TextView subtitleView;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        Window window = getWindow();
+        window.setStatusBarColor(Color.rgb(11, 18, 32));
+        window.setNavigationBarColor(Color.rgb(11, 18, 32));
+        api = new ApiClient();
+        tokenStore = new SecureTokenStore(this);
+        bearer = tokenStore.load();
+        if (bearer == null) {
+            showLogin(null);
+        } else {
+            validateSession();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        api.shutdown();
+        super.onDestroy();
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private GradientDrawable rounded(int color, int strokeColor, int radius) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(dp(radius));
+        if (strokeColor != Color.TRANSPARENT) drawable.setStroke(dp(1), strokeColor);
+        return drawable;
+    }
+
+    private TextView text(String value, int sp, int color, boolean bold) {
+        TextView view = new TextView(this);
+        view.setText(value == null ? "" : value);
+        view.setTextSize(sp);
+        view.setTextColor(color);
+        view.setTypeface(Typeface.DEFAULT, bold ? Typeface.BOLD : Typeface.NORMAL);
+        view.setLineSpacing(0, 1.12f);
+        return view;
+    }
+
+    private Button button(String label, boolean primary) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextSize(15);
+        button.setAllCaps(false);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setTextColor(primary ? Color.WHITE : TEXT);
+        button.setBackground(rounded(primary ? ACCENT : SURFACE, primary ? ACCENT : BORDER, 12));
+        button.setPadding(dp(16), dp(10), dp(16), dp(10));
+        button.setMinHeight(dp(48));
+        return button;
+    }
+
+    private View gap(int height) {
+        Space gap = new Space(this);
+        gap.setLayoutParams(new LinearLayout.LayoutParams(1, dp(height)));
+        return gap;
+    }
+
+    private LinearLayout card() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(16), dp(16), dp(16), dp(16));
+        card.setBackground(rounded(SURFACE, BORDER, 16));
+        card.setElevation(dp(1));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        params.setMargins(0, 0, 0, dp(12));
+        card.setLayoutParams(params);
+        return card;
+    }
+
+    private void validateSession() {
+        setContentView(loadingScreen("Validando sesión segura…"));
+        api.get("/me", bearer, new ApiClient.Callback() {
+            @Override public void onSuccess(JSONObject json) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() { showMain("home"); }
+                });
+            }
+            @Override public void onError(final ApiClient.ApiException error) {
+                runOnUiThread(new Runnable() {

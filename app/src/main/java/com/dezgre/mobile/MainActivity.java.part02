@@ -1,0 +1,100 @@
+                    @Override public void run() {
+                        if (error.status == 401 || error.status == 403) {
+                            tokenStore.clear();
+                            bearer = null;
+                            showLogin("Tu sesión expiró. Inicia sesión nuevamente.");
+                        } else {
+                            showLogin("No se pudo validar la sesión: " + error.getMessage());
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    private View loadingScreen(String message) {
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setGravity(Gravity.CENTER);
+        wrap.setPadding(dp(28), dp(28), dp(28), dp(28));
+        wrap.setBackgroundColor(BG);
+        ProgressBar progress = new ProgressBar(this);
+        wrap.addView(progress);
+        wrap.addView(gap(16));
+        wrap.addView(text(message, 16, MUTED, false));
+        return wrap;
+    }
+
+    private void showLogin(String initialError) {
+        bearer = null;
+        final ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(BG);
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setGravity(Gravity.CENTER_HORIZONTAL);
+        wrap.setPadding(dp(24), dp(48), dp(24), dp(32));
+        scroll.addView(wrap);
+
+        TextView badge = text("DEZGRE", 14, ACCENT, true);
+        badge.setGravity(Gravity.CENTER);
+        badge.setPadding(dp(14), dp(7), dp(14), dp(7));
+        badge.setBackground(rounded(Color.rgb(229, 250, 243), Color.TRANSPARENT, 100));
+        wrap.addView(badge);
+        wrap.addView(gap(18));
+        TextView heading = text("Tu operación, en el teléfono", 29, TEXT, true);
+        heading.setGravity(Gravity.CENTER);
+        wrap.addView(heading);
+        wrap.addView(gap(8));
+        TextView intro = text("Acceso móvil seguro mediante DEZGRE API Bubble V1.", 15, MUTED, false);
+        intro.setGravity(Gravity.CENTER);
+        wrap.addView(intro);
+        wrap.addView(gap(30));
+
+        LinearLayout loginCard = card();
+        wrap.addView(loginCard);
+        loginCard.addView(text("Iniciar sesión", 20, TEXT, true));
+        loginCard.addView(gap(14));
+        final EditText email = new EditText(this);
+        email.setHint("Correo electrónico");
+        email.setSingleLine(true);
+        email.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        email.setPadding(dp(14), dp(4), dp(14), dp(4));
+        email.setBackground(rounded(Color.rgb(249, 250, 251), BORDER, 10));
+        loginCard.addView(email, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
+        loginCard.addView(gap(10));
+        final EditText password = new EditText(this);
+        password.setHint("Contraseña");
+        password.setSingleLine(true);
+        password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        password.setPadding(dp(14), dp(4), dp(14), dp(4));
+        password.setBackground(rounded(Color.rgb(249, 250, 251), BORDER, 10));
+        loginCard.addView(password, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
+        loginCard.addView(gap(12));
+
+        final TextView errorText = text(initialError == null ? "" : initialError, 13, DANGER, false);
+        errorText.setVisibility(initialError == null ? View.GONE : View.VISIBLE);
+        loginCard.addView(errorText);
+        if (initialError != null) loginCard.addView(gap(8));
+
+        final Button submit = button("Entrar", true);
+        loginCard.addView(submit, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
+        loginCard.addView(gap(14));
+        TextView privacy = text("La contraseña no se guarda. El Bearer de sesión se cifra con Android Keystore.", 12, MUTED, false);
+        loginCard.addView(privacy);
+
+        submit.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                String emailValue = email.getText().toString().trim();
+                String passwordValue = password.getText().toString();
+                if (emailValue.isEmpty() || passwordValue.isEmpty()) {
+                    errorText.setText("Completa correo y contraseña.");
+                    errorText.setVisibility(View.VISIBLE);
+                    return;
+                }
+                hideKeyboard();
+                submit.setEnabled(false);
+                submit.setText("Ingresando…");
+                errorText.setVisibility(View.GONE);
+                JSONObject body = new JSONObject();
+                try {

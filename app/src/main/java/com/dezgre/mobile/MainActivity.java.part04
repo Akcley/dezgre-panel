@@ -1,0 +1,94 @@
+                                    String access = json.optString("access_token", "");
+                                    if (access.isEmpty()) showLogin("No se recibió el Bearer de tienda.");
+                                    else persistAndEnter(access);
+                                }
+                            });
+                        }
+                        @Override public void onError(final ApiClient.ApiException error) {
+                            runOnUiThread(new Runnable() {
+                                @Override public void run() { showLogin(error.getMessage()); }
+                            });
+                        }
+                    });
+                }
+            });
+            wrap.addView(storeCard);
+        }
+        Button cancel = button("Volver al login", false);
+        cancel.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { showLogin(null); }
+        });
+        wrap.addView(cancel);
+        setContentView(scroll);
+    }
+
+    private void showMain(String tab) {
+        root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(BG);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setPadding(dp(20), dp(18), dp(20), dp(14));
+        header.setBackgroundColor(Color.rgb(11, 18, 32));
+        titleView = text("DEZGRE", 23, Color.WHITE, true);
+        subtitleView = text("Mobile · Bubble API V1", 12, Color.rgb(148, 163, 184), false);
+        header.addView(titleView);
+        header.addView(subtitleView);
+        root.addView(header);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(18), dp(18), dp(18), dp(22));
+        scroll.addView(body);
+        LinearLayout.LayoutParams scrollParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
+        root.addView(scroll, scrollParams);
+
+        LinearLayout nav = new LinearLayout(this);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        nav.setPadding(dp(8), dp(7), dp(8), dp(7));
+        nav.setBackgroundColor(SURFACE);
+        root.addView(nav, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)));
+        addNavButton(nav, "Inicio", "home", tab);
+        addNavButton(nav, "Productos", "products", tab);
+        addNavButton(nav, "Perfil", "profile", tab);
+        setContentView(root);
+
+        if ("products".equals(tab)) loadProducts();
+        else if ("profile".equals(tab)) loadProfile();
+        else loadHome();
+    }
+
+    private void addNavButton(LinearLayout nav, String label, final String tab, String selected) {
+        Button b = button(label, tab.equals(selected));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f);
+        params.setMargins(dp(4), 0, dp(4), 0);
+        nav.addView(b, params);
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { showMain(tab); }
+        });
+    }
+
+    private void loadHome() {
+        titleView.setText("Inicio");
+        subtitleView.setText("Solo lectura · API Bubble V1");
+        body.addView(loadingInline("Cargando tu espacio…"));
+        api.get("/me", bearer, new ApiClient.Callback() {
+            @Override public void onSuccess(final JSONObject me) {
+                api.get("/store", bearer, new ApiClient.Callback() {
+                    @Override public void onSuccess(final JSONObject storeResponse) {
+                        runOnUiThread(new Runnable() {
+                            @Override public void run() {
+                                body.removeAllViews();
+                                JSONObject user = me.optJSONObject("user");
+                                JSONObject store = storeResponse.optJSONObject("store");
+                                String name = user == null ? "Usuario" : user.optString("name", "Usuario");
+                                body.addView(text("Hola, " + name, 27, TEXT, true));
+                                body.addView(gap(5));
+                                body.addView(text("Tu app está conectada exclusivamente a api.dezgre.com/v1.", 14, MUTED, false));
+                                body.addView(gap(18));
+                                LinearLayout storeCard = card();
+                                storeCard.addView(text("Tienda actual", 13, MUTED, true));
+                                storeCard.addView(gap(6));

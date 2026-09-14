@@ -1,0 +1,85 @@
+                                storeCard.addView(text(store == null ? "—" : store.optString("name", "—"), 22, TEXT, true));
+                                storeCard.addView(gap(5));
+                                storeCard.addView(text(store == null ? "" : store.optString("role", ""), 13, ACCENT, true));
+                                body.addView(storeCard);
+
+                                LinearLayout status = card();
+                                status.addView(text("Estado de la sesión", 13, MUTED, true));
+                                status.addView(gap(8));
+                                status.addView(text("● Bearer activo y protegido", 15, ACCENT, true));
+                                status.addView(gap(4));
+                                status.addView(text("Sin cookies web · Sin acceso a DB · Sin endpoints internos", 13, MUTED, false));
+                                body.addView(status);
+                            }
+                        });
+                    }
+                    @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudo cargar la tienda."); }
+                });
+            }
+            @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudo cargar tu perfil."); }
+        });
+    }
+
+    private View loadingInline(String message) {
+        LinearLayout row = card();
+        ProgressBar progress = new ProgressBar(this);
+        row.addView(progress, new LinearLayout.LayoutParams(dp(36), dp(36)));
+        row.addView(gap(8));
+        row.addView(text(message, 14, MUTED, false));
+        return row;
+    }
+
+    private void loadProducts() {
+        titleView.setText("Productos");
+        subtitleView.setText("Lectura segura desde /v1/products");
+        LinearLayout selector = new LinearLayout(this);
+        selector.setOrientation(LinearLayout.HORIZONTAL);
+        Button bot = button("Catálogo", "bot".equals(currentScope));
+        Button warehouse = button("Almacén", "warehouse".equals(currentScope));
+        LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        half.setMargins(0, 0, dp(5), dp(12));
+        selector.addView(bot, half);
+        LinearLayout.LayoutParams half2 = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        half2.setMargins(dp(5), 0, 0, dp(12));
+        selector.addView(warehouse, half2);
+        body.addView(selector);
+        bot.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { currentScope = "bot"; showMain("products"); }
+        });
+        warehouse.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { currentScope = "warehouse"; showMain("products"); }
+        });
+        body.addView(loadingInline("Cargando productos…"));
+        api.get("/products?scope=" + currentScope, bearer, new ApiClient.Callback() {
+            @Override public void onSuccess(final JSONObject json) {
+                runOnUiThread(new Runnable() {
+                    @Override public void run() { renderProducts(json.optJSONArray("products")); }
+                });
+            }
+            @Override public void onError(ApiClient.ApiException error) { handlePrivateError(error, "No se pudieron cargar productos."); }
+        });
+    }
+
+    private void renderProducts(JSONArray products) {
+        body.removeAllViews();
+        LinearLayout selector = new LinearLayout(this);
+        selector.setOrientation(LinearLayout.HORIZONTAL);
+        Button bot = button("Catálogo", "bot".equals(currentScope));
+        Button warehouse = button("Almacén", "warehouse".equals(currentScope));
+        selector.addView(bot, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        selector.addView(warehouse, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        body.addView(selector);
+        body.addView(gap(14));
+        bot.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { currentScope = "bot"; showMain("products"); } });
+        warehouse.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { currentScope = "warehouse"; showMain("products"); } });
+        int count = products == null ? 0 : products.length();
+        body.addView(text(count + (count == 1 ? " producto" : " productos"), 13, MUTED, true));
+        body.addView(gap(10));
+        if (count == 0) {
+            LinearLayout empty = card();
+            empty.addView(text("No hay productos en este alcance.", 16, TEXT, true));
+            body.addView(empty);
+            return;
+        }
+        for (int i = 0; i < count; i++) {
+            final JSONObject product = products.optJSONObject(i);

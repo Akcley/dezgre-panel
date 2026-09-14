@@ -39,23 +39,19 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Extract independent source
+      - name: Reassemble generated Java source
         shell: bash
-        run: |
-          rm -rf source
-          mkdir source
-          unzip -q DEZGRE-Mobile-v0.1.0-source.zip -d source
+        run: cat app/src/main/java/com/dezgre/mobile/MainActivity.java.part* > app/src/main/java/com/dezgre/mobile/MainActivity.java
 
       - name: Build APK
         shell: bash
-        working-directory: source/dezgre-mobile
         run: gradle :app:assembleDebug --no-daemon --stacktrace
 
       - name: Stage APK and checksum
         shell: bash
         run: |
           mkdir -p dist
-          cp source/dezgre-mobile/app/build/outputs/apk/debug/app-debug.apk dist/DEZGRE-Mobile-v0.1.0.apk
+          cp app/build/outputs/apk/debug/app-debug.apk dist/DEZGRE-Mobile-v0.1.0.apk
           sha256sum dist/DEZGRE-Mobile-v0.1.0.apk | tee dist/DEZGRE-Mobile-v0.1.0.apk.sha256
 
       - name: Upload APK artifact
