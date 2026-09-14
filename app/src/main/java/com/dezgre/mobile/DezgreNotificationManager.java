@@ -21,22 +21,30 @@ final class DezgreNotificationManager {
     static final int REQUEST_NOTIFICATIONS = 4107;
     static final String EXTRA_DEEP_LINK = "dezgre_deep_link";
     private static final String GROUP_ID = "dezgre_events";
+    private static final long[] DEFAULT_VIBRATION = new long[]{0, 180, 90, 180};
 
     private DezgreNotificationManager() {}
 
     static boolean hasPermission(Context context) {
-        return Build.VERSION.SDK_INT < 33
-                || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+        if (Build.VERSION.SDK_INT >= 33
+                && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            return false;
+        }
+        if (Build.VERSION.SDK_INT >= 24) {
+            NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            return manager != null && manager.areNotificationsEnabled();
+        }
+        return true;
     }
 
     static void requestPermission(Activity activity) {
-        if (Build.VERSION.SDK_INT >= 33 && !hasPermission(activity)) {
+        if (Build.VERSION.SDK_INT >= 33
+                && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIFICATIONS);
         }
     }
 
     static String permissionLabel(Context context) {
-        if (Build.VERSION.SDK_INT < 33) return "Activo";
         return hasPermission(context) ? "Activo" : "Pendiente";
     }
 
@@ -100,6 +108,7 @@ final class DezgreNotificationManager {
                 .setAutoCancel(true)
                 .setGroup(GROUP_ID)
                 .setCategory(Notification.CATEGORY_MESSAGE)
+                .setPriority(Notification.PRIORITY_HIGH)
                 .setVisibility(Notification.VISIBILITY_PRIVATE);
 
         if (Build.VERSION.SDK_INT < 26) {
@@ -107,8 +116,9 @@ final class DezgreNotificationManager {
                 builder.setSound(null);
             } else if ("custom".equalsIgnoreCase(config.soundMode) && !config.localSoundUri.isEmpty()) {
                 builder.setSound(Uri.parse(config.localSoundUri));
+                builder.setVibrate(DEFAULT_VIBRATION);
             } else {
-                builder.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION));
+                builder.setDefaults(Notification.DEFAULT_SOUND | Notification.DEFAULT_VIBRATE);
             }
         }
 
@@ -124,18 +134,39 @@ final class DezgreNotificationManager {
             requestPermission(activity);
             return false;
         }
+        resetOldTestChannels(activity);
         String testEvent = "mobile_test";
         NotificationConfigStore store = new NotificationConfigStore(activity);
-        store.put(storeId, new NotificationConfig(testEvent, true, "default", "Sistema", "", "", "test-v1"));
+        store.put(storeId, new NotificationConfig(
+                testEvent,
+                true,
+                "default",
+                "Sonido del sistema",
+                "",
+                "",
+                "test-sound-v3"
+        ));
         return showEvent(
                 activity,
                 storeId,
                 testEvent,
                 "DEZGRE · Prueba",
-                "El motor de notificaciones Android está funcionando.",
+                "Notificación con sonido y vibración habilitados.",
                 "",
                 "local-test-" + System.currentTimeMillis()
         );
+    }
+
+    private static void resetOldTestChannels(Context context) {
+        if (Build.VERSION.SDK_INT < 26) return;
+        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) return;
+        for (NotificationChannel channel : manager.getNotificationChannels()) {
+            String id = channel.getId();
+            if (id != null && id.startsWith("dezgre_mobile_test_")) {
+                manager.deleteNotificationChannel(id);
+            }
+        }
     }
 
     private static void ensureChannel(NotificationManager manager, String channelId, NotificationConfig config) {
@@ -149,6 +180,11 @@ final class DezgreNotificationManager {
         );
         channel.setDescription("DEZGRE · " + config.eventKey + " · " + config.soundRevision);
         channel.enableVibration(true);
+        channel.setVibrationPattern(DEFAULT_VIBRATION);
+        channel.enableLights(true);
+        channel.setLightColor(0xFFB144B2);
+        channel.setShowBadge(true);
+        channel.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
 
         AudioAttributes attributes = new AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION)
@@ -159,7 +195,8 @@ final class DezgreNotificationManager {
         } else if ("custom".equalsIgnoreCase(config.soundMode) && !config.localSoundUri.isEmpty()) {
             channel.setSound(Uri.parse(config.localSoundUri), attributes);
         } else {
-            channel.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), attributes);
+            Uri sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+            channel.setSound(sound, attributes);
         }
         manager.createNotificationChannel(channel);
     }
