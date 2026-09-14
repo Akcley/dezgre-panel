@@ -45,7 +45,7 @@
         try {
             tokenStore.save(access);
             bearer = access;
-            showMain("home");
+            validateSession();
         } catch (Exception error) {
             tokenStore.clear();
             bearer = null;
@@ -55,27 +55,47 @@
 
     private void showStoreSelection(final String ticket, JSONArray stores) {
         ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
         scroll.setBackgroundColor(BG);
         LinearLayout wrap = new LinearLayout(this);
         wrap.setOrientation(LinearLayout.VERTICAL);
-        wrap.setPadding(dp(22), dp(40), dp(22), dp(32));
+        wrap.setPadding(dp(22), dp(34), dp(22), dp(32));
         scroll.addView(wrap);
-        wrap.addView(text("Selecciona tu tienda", 27, TEXT, true));
+
+        TextView top = eyebrow("DEZGRE · TIENDAS");
+        wrap.addView(top);
+        wrap.addView(gap(8));
+        wrap.addView(text("Selecciona tu tienda", 29, TEXT, true));
         wrap.addView(gap(7));
-        wrap.addView(text("Tu usuario tiene acceso a más de una tienda. La API emitirá un Bearer limitado a la que elijas.", 14, MUTED, false));
+        wrap.addView(text("Tu usuario tiene acceso a varias tiendas. Elige con cuál quieres trabajar en esta sesión.", 14, MUTED, false));
         wrap.addView(gap(22));
 
         for (int i = 0; i < stores.length(); i++) {
             final JSONObject store = stores.optJSONObject(i);
             if (store == null) continue;
             LinearLayout storeCard = card();
-            storeCard.addView(text(store.optString("name", "Tienda"), 19, TEXT, true));
-            storeCard.addView(gap(5));
-            storeCard.addView(text(store.optString("role", ""), 13, ACCENT, true));
+            LinearLayout topRow = new LinearLayout(this);
+            topRow.setOrientation(LinearLayout.HORIZONTAL);
+            topRow.setGravity(Gravity.CENTER_VERTICAL);
+            TextView avatar = text(store.optString("name", "T").substring(0, 1).toUpperCase(Locale.ROOT), 18, Color.WHITE, true);
+            avatar.setGravity(Gravity.CENTER);
+            avatar.setBackground(rounded(ACCENT, Color.TRANSPARENT, 10));
+            topRow.addView(avatar, new LinearLayout.LayoutParams(dp(44), dp(44)));
+            LinearLayout identity = new LinearLayout(this);
+            identity.setOrientation(LinearLayout.VERTICAL);
+            identity.setPadding(dp(12), 0, 0, 0);
+            identity.addView(text(store.optString("name", "Tienda"), 18, TEXT, true));
+            identity.addView(gap(3));
+            identity.addView(text(store.optString("role", ""), 12, ACCENT, true));
+            topRow.addView(identity, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            TextView chevron = text("›", 28, MUTED, false);
+            chevron.setGravity(Gravity.CENTER);
+            topRow.addView(chevron, new LinearLayout.LayoutParams(dp(32), dp(44)));
+            storeCard.addView(topRow);
             String domain = store.optString("domain", "");
-            if (!domain.isEmpty()) {
-                storeCard.addView(gap(4));
-                storeCard.addView(text(domain, 13, MUTED, false));
+            if (!domain.isEmpty() && !"null".equals(domain)) {
+                storeCard.addView(gap(10));
+                storeCard.addView(text(domain, 12, MUTED, false));
             }
             storeCard.setClickable(true);
             storeCard.setForeground(getDrawable(android.R.drawable.list_selector_background));
