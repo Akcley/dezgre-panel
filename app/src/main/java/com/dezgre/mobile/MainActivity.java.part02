@@ -2,6 +2,7 @@
                         if (error.status == 401 || error.status == 403) {
                             tokenStore.clear();
                             bearer = null;
+                            currentUserAvatar = "";
                             showLogin("Tu sesión expiró. Inicia sesión nuevamente.");
                         } else {
                             showLogin("No se pudo validar la sesión: " + error.getMessage());
@@ -36,6 +37,7 @@
         bearer = null;
         currentUserName = "Usuario";
         currentUserRole = "";
+        currentUserAvatar = "";
         currentStoreName = "Tienda";
         final ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
