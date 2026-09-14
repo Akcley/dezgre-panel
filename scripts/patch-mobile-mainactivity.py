@@ -12,8 +12,15 @@ new = '''        if ("products".equals(tab)) loadProducts();
         else if ("panel".equals(tab)) loadDashboard();
         else if ("orders".equals(tab)) loadOrders();
         else showUnavailableSection(tab);'''
-count = source.count(old)
-if count != 1:
-    raise SystemExit(f"Expected exactly one mobile route block, found {count}")
-path.write_text(source.replace(old, new), encoding="utf-8")
-print("Mobile routes patched: panel -> dashboard/summary, orders -> orders")
+
+old_count = source.count(old)
+new_count = source.count(new)
+if new_count == 1 and old_count == 0:
+    print("Mobile routes already wired: panel -> dashboard/summary, orders -> orders")
+elif old_count == 1 and new_count == 0:
+    path.write_text(source.replace(old, new, 1), encoding="utf-8")
+    print("Mobile routes patched: panel -> dashboard/summary, orders -> orders")
+else:
+    raise SystemExit(
+        f"Unexpected mobile route state: old={old_count}, new={new_count}; refusing broad rewrite"
+    )
