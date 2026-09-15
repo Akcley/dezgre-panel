@@ -31,6 +31,7 @@ final class DezgreNotificationManager {
     private DezgreNotificationManager() {}
 
     static boolean hasPermission(Context context) {
+        refreshVisibleChannelLabels(context);
         if (Build.VERSION.SDK_INT >= 33
                 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             return false;
@@ -43,6 +44,7 @@ final class DezgreNotificationManager {
     }
 
     static void requestPermission(Activity activity) {
+        refreshVisibleChannelLabels(activity);
         if (Build.VERSION.SDK_INT >= 33
                 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIFICATIONS);
@@ -213,6 +215,32 @@ final class DezgreNotificationManager {
                 manager.deleteNotificationChannel(id);
             }
         }
+    }
+
+    private static void refreshVisibleChannelLabels(Context context) {
+        if (Build.VERSION.SDK_INT < 26 || context == null) return;
+        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) return;
+        for (NotificationChannel channel : manager.getNotificationChannels()) {
+            String eventKey = eventKeyFromChannelId(channel.getId());
+            if (eventKey == null) continue;
+            channel.setName(channelName(eventKey));
+            channel.setDescription(channelDescription(eventKey));
+            manager.createNotificationChannel(channel);
+        }
+    }
+
+    private static String eventKeyFromChannelId(String id) {
+        if (id == null) return null;
+        if (id.startsWith("dezgre_web_order_created_")) return MobileNotificationEvent.WEB_ORDER_CREATED;
+        if (id.startsWith("dezgre_ai_order_created_")) return MobileNotificationEvent.AI_ORDER_CREATED;
+        if (id.startsWith("dezgre_whatsapp_connection_disconnected_")) return MobileNotificationEvent.WHATSAPP_CONNECTION_DISCONNECTED;
+        if (id.startsWith("dezgre_whatsapp_reconnect_started_")) return MobileNotificationEvent.WHATSAPP_RECONNECT_STARTED;
+        if (id.startsWith("dezgre_notification_test_")) return MobileNotificationEvent.NOTIFICATION_TEST;
+        if (id.startsWith("dezgre_mobile_test_")) return "mobile_test";
+        if (id.startsWith("dezgre_whatsapp_message_")) return "whatsapp_message";
+        if (id.startsWith("dezgre_support_chat_")) return "support_chat";
+        return null;
     }
 
     private static void ensureChannel(NotificationManager manager, String channelId, NotificationConfig config) {
