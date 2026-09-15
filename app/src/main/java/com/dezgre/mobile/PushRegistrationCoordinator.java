@@ -1,9 +1,6 @@
 package com.dezgre.mobile;
 
 import android.content.Context;
-import android.os.Handler;
-import android.os.Looper;
-import android.widget.Toast;
 
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -98,7 +95,6 @@ final class PushRegistrationCoordinator {
                 diagnostics.recordPutSuccess(status, json);
                 resolveStoreScope(app, cleanBearer, diagnostics);
                 api.shutdown();
-                showResult(app, true, status, diagnostics);
                 complete(callback, true, "REGISTERED");
             }
 
@@ -107,7 +103,6 @@ final class PushRegistrationCoordinator {
                 MobilePushRegistration.invalidateRegistration(app, cleanBearer);
                 diagnostics.recordPutFailure(error.status, error.code, error.getMessage());
                 api.shutdown();
-                showResult(app, false, error.status, diagnostics);
                 complete(callback, false, error.code);
             }
         });
@@ -155,15 +150,6 @@ final class PushRegistrationCoordinator {
             public void onError(ApiClient.ApiException error) {
                 scopeApi.shutdown();
             }
-        });
-    }
-
-    private static void showResult(Context app, boolean success, int status, PushDiagnosticsStore diagnostics) {
-        new Handler(Looper.getMainLooper()).post(() -> {
-            String text = success
-                    ? "ANDROID DEVICE PUSH REGISTERED = PASS · HTTP " + status
-                    : "Push Android no registrado · HTTP " + status;
-            Toast.makeText(app, text, Toast.LENGTH_LONG).show();
         });
     }
 
