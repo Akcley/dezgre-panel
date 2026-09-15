@@ -22,7 +22,7 @@ final class SecurePushStore {
     private static final String PREFS = "dezgre_mobile_push_secure_v1";
     private static final String TOKEN_KEY = "push_token";
     private static final String DEVICE_ID_KEY = "device_id";
-    private static final String REGISTERED_HASH_KEY = "registered_token_hash";
+    private static final String REGISTERED_PREFIX = "registered_scope.";
 
     private final SharedPreferences preferences;
 
@@ -33,13 +33,10 @@ final class SecurePushStore {
     synchronized void savePushToken(String token) throws Exception {
         String clean = token == null ? "" : token.trim();
         if (clean.isEmpty()) {
-            preferences.edit().remove(TOKEN_KEY).remove(REGISTERED_HASH_KEY).apply();
+            preferences.edit().remove(TOKEN_KEY).apply();
             return;
         }
         saveEncrypted(TOKEN_KEY, clean);
-        if (!tokenHash(clean).equals(preferences.getString(REGISTERED_HASH_KEY, ""))) {
-            preferences.edit().remove(REGISTERED_HASH_KEY).apply();
-        }
     }
 
     synchronized String loadPushToken() {
@@ -54,20 +51,30 @@ final class SecurePushStore {
         return generated;
     }
 
-    synchronized boolean needsRegistration() {
+    synchronized boolean needsRegistration(String bearer) {
         String token = loadPushToken();
         if (token == null || token.isEmpty()) return false;
-        return !tokenHash(token).equals(preferences.getString(REGISTERED_HASH_KEY, ""));
+        String key = registrationKey(bearer);
+        if (key == null) return true;
+        return !tokenHash(token).equals(preferences.getString(key, ""));
     }
 
-    synchronized void markRegistered() {
+    synchronized void markRegistered(String bearer) {
         String token = loadPushToken();
-        if (token == null || token.isEmpty()) return;
-        preferences.edit().putString(REGISTERED_HASH_KEY, tokenHash(token)).apply();
+        String key = registrationKey(bearer);
+        if (token == null || token.isEmpty() || key == null) return;
+        preferences.edit().putString(key, tokenHash(token)).apply();
     }
 
-    synchronized void invalidateRegistration() {
-        preferences.edit().remove(REGISTERED_HASH_KEY).apply();
+    synchronized void invalidateRegistration(String bearer) {
+        String key = registrationKey(bearer);
+        if (key != null) preferences.edit().remove(key).apply();
+    }
+
+    private String registrationKey(String bearer) {
+        String clean = bearer == null ? "" : bearer.trim();
+        if (clean.isEmpty()) return null;
+        return REGISTERED_PREFIX + tokenHash(clean);
     }
 
     private SecretKey getOrCreateKey() throws Exception {
@@ -109,7 +116,7 @@ final class SecurePushStore {
             cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), new GCMParameterSpec(128, iv));
             return new String(cipher.doFinal(data), StandardCharsets.UTF_8);
         } catch (Exception ignored) {
-            preferences.edit().remove(key).remove(REGISTERED_HASH_KEY).apply();
+            preferences.edit().remove(key).apply();
             return null;
         }
     }
