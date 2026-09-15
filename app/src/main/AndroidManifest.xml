@@ -9,6 +9,15 @@
         android:label="DEZGRE"
         android:icon="@drawable/ic_launcher"
         android:theme="@style/Theme.DezgreMobile">
+
+        <service
+            android:name=".DezgreFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <activity
             android:name=".PanelWebActivity"
             android:exported="false"
