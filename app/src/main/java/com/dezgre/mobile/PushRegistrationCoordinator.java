@@ -1,6 +1,9 @@
 package com.dezgre.mobile;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
+import android.widget.Toast;
 
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -28,39 +31,48 @@ final class PushRegistrationCoordinator {
     static void ensureRegistered(Context context, String bearer, Callback callback) {
         final Context app = context.getApplicationContext();
         final String cleanBearer = clean(bearer);
+        final PushDiagnosticsStore diagnostics = new PushDiagnosticsStore(app);
+        diagnostics.recordPermission(DezgreNotificationManager.hasPermission(app));
+        diagnostics.recordFirebaseServiceState();
         if (cleanBearer.isEmpty()) {
             complete(callback, false, "NO_BEARER");
             return;
         }
         if (!isFirebaseConfigured(app)) {
+            diagnostics.recordFcmToken(false);
             complete(callback, false, "FIREBASE_NOT_CONFIGURED");
             return;
         }
 
         try {
-            // Backend contract currently requires the FCM registration token.
-            // getToken() remains supported by the SDK even though newer Firebase releases
-            // recommend FID-based registration for new backends.
             FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
                 if (!task.isSuccessful()) {
+                    diagnostics.recordFcmToken(false);
                     complete(callback, false, "FCM_TOKEN_FAILED");
                     return;
                 }
                 String token = clean(task.getResult());
-                if (token.isEmpty() || !MobilePushRegistration.acceptTransportToken(app, token)) {
+                boolean accepted = !token.isEmpty() && MobilePushRegistration.acceptTransportToken(app, token);
+                diagnostics.recordFcmToken(accepted);
+                if (!accepted) {
                     complete(callback, false, "FCM_TOKEN_EMPTY");
                     return;
                 }
                 registerStoredToken(app, cleanBearer, callback);
             });
         } catch (Exception ignored) {
+            diagnostics.recordFcmToken(false);
             complete(callback, false, "FCM_UNAVAILABLE");
         }
     }
 
     static void onTokenRotated(Context context, String token) {
         final Context app = context.getApplicationContext();
-        if (!MobilePushRegistration.acceptTransportToken(app, token)) return;
+        PushDiagnosticsStore diagnostics = new PushDiagnosticsStore(app);
+        boolean accepted = MobilePushRegistration.acceptTransportToken(app, token);
+        diagnostics.recordFcmToken(accepted);
+        diagnostics.recordFirebaseServiceState();
+        if (!accepted) return;
         String bearer = new SecureTokenStore(app).load();
         if (clean(bearer).isEmpty()) return;
         registerStoredToken(app, bearer, null);
@@ -69,25 +81,33 @@ final class PushRegistrationCoordinator {
     static void registerStoredToken(Context context, String bearer, Callback callback) {
         final Context app = context.getApplicationContext();
         final String cleanBearer = clean(bearer);
+        final PushDiagnosticsStore diagnostics = new PushDiagnosticsStore(app);
         JSONObject payload = MobilePushRegistration.buildRegistrationPayload(app);
         if (cleanBearer.isEmpty() || payload == null) {
             complete(callback, false, "REGISTRATION_NOT_READY");
             return;
         }
 
+        final String deviceId = MobilePushRegistration.deviceId(app);
+        diagnostics.recordPutAttempt(deviceId);
         final ApiClient api = new ApiClient();
-        api.put(DEVICE_ENDPOINT, cleanBearer, payload, new ApiClient.Callback() {
+        api.putDetailed(DEVICE_ENDPOINT, cleanBearer, payload, new ApiClient.DetailedCallback() {
             @Override
-            public void onSuccess(JSONObject json) {
+            public void onSuccess(int status, JSONObject json) {
                 MobilePushRegistration.markRegistered(app, cleanBearer);
+                diagnostics.recordPutSuccess(status, json);
+                resolveStoreScope(app, cleanBearer, diagnostics);
                 api.shutdown();
+                showResult(app, true, status, diagnostics);
                 complete(callback, true, "REGISTERED");
             }
 
             @Override
             public void onError(ApiClient.ApiException error) {
                 MobilePushRegistration.invalidateRegistration(app, cleanBearer);
+                diagnostics.recordPutFailure(error.status, error.code, error.getMessage());
                 api.shutdown();
+                showResult(app, false, error.status, diagnostics);
                 complete(callback, false, error.code);
             }
         });
@@ -116,6 +136,34 @@ final class PushRegistrationCoordinator {
                 api.shutdown();
                 complete(callback, false, error.code);
             }
+        });
+    }
+
+    private static void resolveStoreScope(Context app, String bearer, PushDiagnosticsStore diagnostics) {
+        ApiClient scopeApi = new ApiClient();
+        scopeApi.get("/me", bearer, new ApiClient.Callback() {
+            @Override
+            public void onSuccess(JSONObject json) {
+                JSONObject store = json.optJSONObject("store");
+                if (store != null) {
+                    diagnostics.recordStoreScope(store.optString("id", ""), store.optString("name", ""));
+                }
+                scopeApi.shutdown();
+            }
+
+            @Override
+            public void onError(ApiClient.ApiException error) {
+                scopeApi.shutdown();
+            }
+        });
+    }
+
+    private static void showResult(Context app, boolean success, int status, PushDiagnosticsStore diagnostics) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            String text = success
+                    ? "ANDROID DEVICE PUSH REGISTERED = PASS · HTTP " + status
+                    : "Push Android no registrado · HTTP " + status;
+            Toast.makeText(app, text, Toast.LENGTH_LONG).show();
         });
     }
 
