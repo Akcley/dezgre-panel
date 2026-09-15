@@ -28,45 +28,82 @@ else:
         f"Unexpected mobile route state: old={old_count}, new={new_count}; refusing broad rewrite"
     )
 
-old_entry = '''                        applyIdentity(json);
-                        showMain("home");'''
-new_entry = '''                        applyIdentity(json);
-                        openRealPanel();'''
+old_startup = '''        if (bearer == null) {
+            showLogin(null);
+        } else {
+            validateSession();
+        }'''
+new_startup = '''        if (bearer == null) {
+            showLogin(null);
+        } else {
+            openRealPanel();
+        }'''
 
-old_entry_count = source.count(old_entry)
-new_entry_count = source.count(new_entry)
-if new_entry_count == 1 and old_entry_count == 0:
-    print("Session already opens the real DEZGRE panel")
-elif old_entry_count == 1 and new_entry_count == 0:
-    source = source.replace(old_entry, new_entry, 1)
+old_startup_count = source.count(old_startup)
+new_startup_count = source.count(new_startup)
+if new_startup_count == 1 and old_startup_count == 0:
+    print("Saved session already enters real panel directly")
+elif old_startup_count == 1 and new_startup_count == 0:
+    source = source.replace(old_startup, new_startup, 1)
     changed = True
-    print("Session entry patched to real DEZGRE panel")
+    print("Removed duplicate /me roundtrip from cold start")
 else:
     raise SystemExit(
-        f"Unexpected session entry state: old={old_entry_count}, new={new_entry_count}; refusing broad rewrite"
+        f"Unexpected startup state: old={old_startup_count}, new={new_startup_count}; refusing broad rewrite"
+    )
+
+old_persist = '''            tokenStore.save(access);
+            bearer = access;
+            validateSession();'''
+new_persist = '''            tokenStore.save(access);
+            bearer = access;
+            openRealPanel();'''
+
+old_persist_count = source.count(old_persist)
+new_persist_count = source.count(new_persist)
+if new_persist_count == 1 and old_persist_count == 0:
+    print("Fresh login already enters real panel directly")
+elif old_persist_count == 1 and new_persist_count == 0:
+    source = source.replace(old_persist, new_persist, 1)
+    changed = True
+    print("Removed duplicate /me roundtrip after login/store selection")
+else:
+    raise SystemExit(
+        f"Unexpected persist state: old={old_persist_count}, new={new_persist_count}; refusing broad rewrite"
     )
 
 method_signature = "    private void openRealPanel() {"
 validate_signature = "    private void validateSession() {"
 method = '''    private void openRealPanel() {
-        setContentView(loadingScreen("Abriendo el panel real de DEZGRE…"));
+        if (bearer == null || bearer.trim().isEmpty()) {
+            showLogin(null);
+            return;
+        }
+
+        // Keep the launch transition deliberately quiet: no second logo, spinner or
+        // loading message. panel-access already validates the Bearer and store access,
+        // so calling /me first only added an unnecessary network roundtrip.
+        FrameLayout launchSurface = new FrameLayout(this);
+        launchSurface.setBackgroundColor(BG);
+        setContentView(launchSurface);
+
         api.get("/mobile/panel-access", bearer, new ApiClient.Callback() {
             @Override public void onSuccess(final JSONObject json) {
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
                         String accessUrl = json.optString("url", "").trim();
+                        JSONObject data = json.optJSONObject("data");
+                        if (accessUrl.isEmpty() && data != null) {
+                            accessUrl = data.optString("redirect_url", "").trim();
+                        }
                         if (accessUrl.isEmpty() || !accessUrl.startsWith("https://")) {
-                            android.widget.Toast.makeText(
-                                    MainActivity.this,
-                                    "La API no devolvió un acceso web seguro. Se abrirá el modo móvil de respaldo.",
-                                    android.widget.Toast.LENGTH_LONG
-                            ).show();
                             showMain("home");
                             return;
                         }
                         android.content.Intent intent = new android.content.Intent(MainActivity.this, PanelWebActivity.class);
                         intent.putExtra(PanelWebActivity.EXTRA_ACCESS_URL, accessUrl);
                         startActivity(intent);
+                        overridePendingTransition(0, 0);
                         finish();
                     }
                 });
@@ -82,12 +119,13 @@ method = '''    private void openRealPanel() {
                             showLogin("Tu sesión expiró o ya no tiene acceso.");
                             return;
                         }
+                        // Network/API outage must not make the installed app unusable.
+                        showMain("home");
                         android.widget.Toast.makeText(
                                 MainActivity.this,
-                                "El panel web todavía no está disponible. Se abrirá el modo móvil de respaldo.",
-                                android.widget.Toast.LENGTH_LONG
+                                "No se pudo abrir el panel web. Se activó el modo de respaldo.",
+                                android.widget.Toast.LENGTH_SHORT
                         ).show();
-                        showMain("home");
                     }
                 });
             }
@@ -103,9 +141,9 @@ if method_count == 0:
         raise SystemExit(f"Expected one validateSession marker, found {marker_count}")
     source = source.replace(validate_signature, method + validate_signature, 1)
     changed = True
-    print("Inserted exact web panel bootstrap")
+    print("Inserted optimized exact web panel bootstrap")
 elif method_count == 1:
-    print("Exact web panel bootstrap already present")
+    print("Optimized exact web panel bootstrap already present")
 else:
     raise SystemExit(f"Unexpected openRealPanel count: {method_count}")
 
