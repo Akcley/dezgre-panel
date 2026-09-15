@@ -15,14 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Apply narrow app-only performance patch
+      - name: Apply app-only performance patch
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           import base64
-
           java_path = Path('app/src/main/java/com/dezgre/mobile/PanelWebActivity.java')
           source = java_path.read_text(encoding='utf-8')
           old_scroll = '        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);\n        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);'
@@ -41,31 +40,23 @@ jobs:
           method = base64.b64decode('ICAgIHByaXZhdGUgdm9pZCBhcHBseU5hdGl2ZVBhbmVsRml4ZXMoV2ViVmlldyB2aWV3KSB7CiAgICAgICAgaWYgKHZpZXcgPT0gbnVsbCB8fCBCdWlsZC5WRVJTSU9OLlNES19JTlQgPCAxOSkgcmV0dXJuOwogICAgICAgIFN0cmluZyBqYXZhc2NyaXB0ID0gIihmdW5jdGlvbigpewogICAgICAgICAgICAgICAgKyAidmFyIGlkPSdkZXpncmUtbmF0aXZlLWFwcC1maXhlcy12MDE3JzsiCiAgICAgICAgICAgICAgICArICJpZighZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoaWQpKXsiCiAgICAgICAgICAgICAgICArICJ2YXIgcz1kb2N1bWVudC5jcmVhdGVFbGVtZW50KCdzdHlsZScpO3MuaWQ9aWQ7IgogICAgICAgICAgICAgICAgKyAicy50ZXh0Q29udGVudD0naHRtbHttaW4taGVpZ2h0OjEwMCUhaW1wb3J0YW50O292ZXJzY3JvbGwtYmVoYXZpb3IteTpub25lIWltcG9ydGFudDtzY3JvbGwtYmVoYXZpb3I6YXV0byFpbXBvcnRhbnR9Ym9keXttaW4taGVpZ2h0OjEwMHZoIWltcG9ydGFudDttaW4taGVpZ2h0OjEwMGR2aCFpbXBvcnRhbnQ7bWFyZ2luOjAhaW1wb3J0YW50O292ZXJzY3JvbGwtYmVoYXZpb3IteTpub25lIWltcG9ydGFudH0ucGFuZWxTaGVsbHttaW4taGVpZ2h0OjEwMHZoIWltcG9ydGFudDttaW4taGVpZ2h0OjEwMGR2aCFpbXBvcnRhbnR9LnBhbmVsU2hlbGxbZGF0YS1wYW5lbC10aGVtZT1kYXJrXSwucGFuZWxTaGVsbFtkYXRhLXBhbmVsLXRoZW1lPWRhcmtdIC5wYW5lbENvbnRlbnR7YmFja2dyb3VuZDojMTUxNTE2IWltcG9ydGFudH0ucGFuZWxSb3V0ZVRyYW5zaXRpb257YW5pbWF0aW9uOmRlemdyZU1vYmlsZVJvdXRlSW4gLjE4cyBjdWJpYy1iZXppZXIoLjIsLjcyLC4zLDEpIWltcG9ydGFudDt3aWxsLWNoYW5nZTpvcGFjaXR5LHRyYW5zZm9ybX0ucGFuZWxNb2JpbGVUb3BiYXJ7YmFja2Ryb3AtZmlsdGVyOm5vbmUhaW1wb3J0YW50Oy13ZWJraXQtYmFja2Ryb3AtZmlsdGVyOm5vbmUhaW1wb3J0YW50fS5uYXRpVmlzdWFsQnViYmxle2FuaW1hdGlvbjpkZXpncmVNb2JpbGVOYXRpRmxvYXQgNC44cyBlYXNlLWluLW91dCBpbmZpbml0ZS FpbXBvcnRhbnQ7d2lsbC1jaGFuZ2U6dHJhbnNmb3JtIWltcG9ydGFudDt0cmFuc2Zvcm06dHJhbnNsYXRlWigwKTtiYWNrZmFjZS12aXNpYmlsaXR5OmhpZGRlbjtib3gtc2hhZG93OjAgOHB4IDIycHggcmdiYSgwLDAsMCwuMTYpIWltcG9ydGFudH0ubmF0aVZpc3VhbFBhbmVse2FuaW1hdGlvbjpkZXpncmVNb2JpbGVOYXRpSW4gLjE4cyBjdWJpYy1iZXppZXIoLjIsLjgsLjIsMSkhaW1wb3J0YW50O3dpbGwtY2hhbmdlOm9wYWNpdHksdHJhbnNmb3JtIWltcG9ydGFudDt0cmFuc2Zvcm06dHJhbnNsYXRlWigwKTtiYWNrZHJvcC1maWx0ZXI6bm9uZSFpbXBvcnRhbnQ7LXdlYmtpdC1iYWNrZHJvcC1maWx0ZXI6bm9uZSFpbXBvcnRhbnQ7Ym94LXNoYWRvdzowIDE0cHggMzRweCByZ2JhKDAsMCwwLC4xNikhbXBvcnRhbnR9W2NsYXNzKj1uYXRpIGldLFtjbGFzcyo9bmF0aSBpXSAqe2JhY2tkcm9wLWZpbHRlcjpub25lIWltcG9ydGFudDstV2Via2l0LWJhY2tkcm9wLWZpbHRlcjpub25lIWltcG9ydGFudH0uZGV6Z3JlLW1vYmlsZS1wYXVzZWQgLm5hdGlWaXN1YWxCdWJibGV7YW5pbWF0aW9uLXBsYXktc3RhdGU6cGF1c2VkIWltcG9ydGFudH1Aa2V5ZnJhbWVzIGRlemdyZU1vYmlsZVJvdXRlSW57ZnJvbXthbHBoYTouNzI7dHJhbnNmb3JtOnRyYW5zbGF0ZTNkKDAsNXB4LDApfXRve29wYWNpdHk6MTt0cmFuc2Zvcm06dHJhbnNsYXRlM2QoMCwwLDApfX1Aa2V5ZnJhbWVzIGRlemdyZU1vYmlsZU5hdGlGbG9hdHswJSwxMDAl e3RyYW5zZm9ybTp0cmFuc2xhdGUzZCgwLDAsMCl9NTAl e3RyYW5zZm9ybTp0cmFuc2xhdGUzZCgwLC0zcHgsMCl9fUB rZXlmcmFtZXMgZGV6Z3JlTW9iaWxlTmF0aUlu e2Zyb217b3BhY2l0eTowO3RyYW5zZm9ybTp0cmFuc2xhdGUzZCgwLDhweCwwKSBzY2FsZSguOTkpfXRve29wYWNpdHk6MTt0cmFuc2Zvcm06dHJhbnNsYXRlM2QoMCwwLDApIHNjYWxlKDEpfX1AbWVkaWEobWF4LXdpZHRoOjEwMjNweCl7LnBhbmVsU2lkZWJhcntwb3NpdGlvbjpmaXhlZCFpbXBvcnRhbnQ7dG9wOjAhaW1wb3J0YW50O3JpZ2h0OmF1dG8haW1wb3J0YW50O2JvdHRvbTowIWltcG9ydGFudDtoZWlnaHQ6YXV0byFpbXBvcnRhbnQ7bWluLWhlaWdodDoxMDB2aCFpbXBvcnRhbnQ7bWluLWhlaWdodDoxMDBkdmghaW1wb3J0YW50O21heC1oZWlnaHQ6bm9uZSFpbXBvcnRhbnQ7Ym94LXNpemluZzpib3JkZXItYm94IWltcG9ydGFudDtvdmVyc2Nyb2xsLWJlaGF2aW9yOmNvbnRhaW4haW1wb3J0YW50O3BhZGRpbmctYm90dG9tOm1heCgxOHB4LGVudihzYWZlLWFyZWEtaW5zZXQtYm90dG9tKSkhaW1wb3J0YW50O3RyYW5zaXRpb246dHJhbnNmb3JtIC4yMnMgY3ViaWMtYmV6aWVyKC4yLC44LC4yLDEpIWltcG9ydGFudH0ucGFuZWxDb250ZW50e21pbi1oZWlnaHQ6Y2FsYygxMDBkdmggLSA1OHB4KSFpbXBvcnRhbnR9LnBhbmVsU2lkZWJhciBuYXYgYSwucGFuZWxTaGVsbCBidXR0b257dG91Y2gtYWN0aW9uOm1hbmlwdWxhdGlvbn0ucGFuZWxTaWRlYmFyIG5hdiBhOmFjdGl2ZSwucGFuZWxTaGVsbCBidXR0b246YWN0aXZle3RyYW5zZm9ybTpzY2FsZSguOTg1KSFpbXBvcnRhbnR9fSc7IgogICAgICAgICAgICAgICAgKyAiKGRvY3VtZW50LmhlYWR8fGRvY3VtZW50LmRvY3VtZW50RWxlbWVudCkuYXBwZW5kQ2hpbGQocyk7IgogICAgICAgICAgICAgICAgKyAifSIKICAgICAgICAgICAgICAgICsgInZhciByb290PWRvY3VtZW50LmRvY3VtZW50RWxlbWVudCxib2R5PWRvY3VtZW50LmJvZHksc2hlbGw9ZG9jdW1lbnQucXVlcnlTZWxlY3RvcignLnBhbmVsU2hlbGwnKTsiCiAgICAgICAgICAgICAgICArICJmdW5jdGlvbiBzeW5jVGhlbWUoKXtzaGVsbD1kb2N1bWVudC5xdWVyeVNlbGVjdG9yKCcucGFuZWxTaGVsbCcpO3ZhciBkYXJrPXNoZWxsJiZzaGVsbC5nZXRBdHRyaWJ1dGUoJ2RhdGEtcGFuZWwtdGhlbWUnKT09PSdkYXJrJzt2YXIgYz1kYXJrPycjMTUxNTE2JzonI2Y1ZjVmNic7cm9vdC5zdHlsZS5iYWNrZ3JvdW5kQ29sb3I9YztpZihib2R5KWJvZHkuc3R5bGUuYmFja2dyb3VuZENvbG9yPWM7aWYoc2hlbGwpc2hlbGwuc3R5bGUubWluSGVpZ2h0PScxMDBkdmgnO30iCiAgICAgICAgICAgICAgICArICJzeW5jVGhlbWUoKTsiCiAgICAgICAgICAgICAgICArICJpZihzaGVsbCYmIXNoZWxsLl9fZGV6Z3JlVGhlbWVPYnNlcnZlcil7dmFyIG1vPW5ldyBNdXRhdGlvbk9ic2VydmVyKHN5bmNUaGVtZSk7bW8ub2JzZXJ2ZShzaGVsbCx7YXR0cmlidXRlczp0cnVlLGF0dHJpYnV0ZUZpbHRlcjpbJ2RhdGEtcGFuZWwtdGhlbWUnXX0pO3NoZWxsLl9fZGV6Z3JlVGhlbWVPYnNlcnZlcj1tbzt9IgogICAgICAgICAgICAgICAgKyAiaWYoIWRvY3VtZW50Ll9fZGV6Z3JlVmlzaWJpbGl0eUhvb2spe2RvY3VtZW50Ll9fZGV6Z3JlVmlzaWJpbGl0eUhvb2s9dHJ1ZTtkb2N1bWVudC5hZGRFdmVudExpc3RlbmVyKCd2aXNpYmlsaXR5Y2hhbmdlJyxmdW5jdGlvbigpe3Jvb3QuY2xhc3NMaXN0LnRvZ2dsZSgnZGV6Z3JlLW1vYmlsZS1wYXVzZWQnLGRvY3VtZW50LmhpZGRlbik7fSk7fSIKICAgICAgICAgICAgICAgICsgIn0pKCk7IjsKICAgICAgICB2aWV3LmV2YWx1YXRlSmF2YXNjcmlwdChqYXZhc2NyaXB0LCBudWxsKTsKICAgIH0KCg==').decode('utf-8')
           source = source[:start] + method + source[end:]
           java_path.write_text(source, encoding='utf-8')
-
           gradle_path = Path('app/build.gradle')
           gradle = gradle_path.read_text(encoding='utf-8')
           old = "def buildVersionName = '0.1.6'"
-          new = "def buildVersionName = System.getenv('DEZGRE_VERSION_NAME') ?: '0.1.7'"
+          new = "def buildVersionName = '0.1.7'"
           if gradle.count(old) != 1:
               raise SystemExit('Expected one v0.1.6 Gradle declaration')
           gradle_path.write_text(gradle.replace(old, new, 1), encoding='utf-8')
-
-          build_path = Path('.github/workflows/build-dezgre-mobile-apk.yml')
-          workflow = build_path.read_text(encoding='utf-8')
-          if 'DEZGRE-Mobile-v0.1.4' not in workflow:
-              raise SystemExit('Expected v0.1.4 artifact naming')
-          build_path.write_text(workflow.replace('0.1.4', '0.1.7'), encoding='utf-8')
           PY
           grep -q 'DEZGRE-Mobile/0.1.7' app/src/main/java/com/dezgre/mobile/PanelWebActivity.java
           grep -q 'dezgre-native-app-fixes-v017' app/src/main/java/com/dezgre/mobile/PanelWebActivity.java
-          grep -q 'DEZGRE-Mobile-v0.1.7' .github/workflows/build-dezgre-mobile-apk.yml
-      - name: Commit app-only patch and remove temporary workflow
+          grep -q "def buildVersionName = '0.1.7'" app/build.gradle
+      - name: Commit app-only code
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add app/src/main/java/com/dezgre/mobile/PanelWebActivity.java app/build.gradle .github/workflows/build-dezgre-mobile-apk.yml
-          git rm .github/workflows/tmp-mobile-v017-performance.yml
+          git add app/src/main/java/com/dezgre/mobile/PanelWebActivity.java app/build.gradle
           git commit -m 'perf(mobile): smooth NATI and fix viewport backgrounds v0.1.7'
           git push origin HEAD:mobile-app-v1-build
