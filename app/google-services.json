@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "536890789840",
+    "project_id": "dezgre-mobile",
+    "storage_bucket": "dezgre-mobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:536890789840:android:229dbf828631d3a77173d5",
+        "android_client_info": {
+          "package_name": "com.dezgre.mobile.preview"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCi_j4OI3lghdJND0zeN-G2oHWVGe0eeig"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
