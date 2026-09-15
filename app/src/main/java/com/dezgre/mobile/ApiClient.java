@@ -24,6 +24,11 @@ public final class ApiClient {
         void onError(ApiException error);
     }
 
+    public interface DetailedCallback {
+        void onSuccess(int status, JSONObject json);
+        void onError(ApiException error);
+    }
+
     public static final class ApiException extends Exception {
         public final int status;
         public final String code;
@@ -36,19 +41,23 @@ public final class ApiClient {
     }
 
     public void get(final String path, final String bearer, final Callback callback) {
-        request("GET", path, bearer, null, callback);
+        request("GET", path, bearer, null, callback, null);
     }
 
     public void post(final String path, final String bearer, final JSONObject body, final Callback callback) {
-        request("POST", path, bearer, body, callback);
+        request("POST", path, bearer, body, callback, null);
     }
 
     public void put(final String path, final String bearer, final JSONObject body, final Callback callback) {
-        request("PUT", path, bearer, body, callback);
+        request("PUT", path, bearer, body, callback, null);
+    }
+
+    public void putDetailed(final String path, final String bearer, final JSONObject body, final DetailedCallback callback) {
+        request("PUT", path, bearer, body, null, callback);
     }
 
     public void delete(final String path, final String bearer, final Callback callback) {
-        request("DELETE", path, bearer, null, callback);
+        request("DELETE", path, bearer, null, callback, null);
     }
 
     private void request(
@@ -56,7 +65,8 @@ public final class ApiClient {
             final String path,
             final String bearer,
             final JSONObject body,
-            final Callback callback
+            final Callback callback,
+            final DetailedCallback detailedCallback
     ) {
         executor.execute(new Runnable() {
             @Override
@@ -92,16 +102,23 @@ public final class ApiClient {
                     String raw = readAll(stream);
                     JSONObject json = raw.isEmpty() ? new JSONObject() : new JSONObject(raw);
                     if (status >= 200 && status < 300) {
-                        callback.onSuccess(json);
+                        if (detailedCallback != null) detailedCallback.onSuccess(status, json);
+                        else if (callback != null) callback.onSuccess(json);
                     } else {
                         String message = json.optString("error", "La API respondió con un error.");
                         String code = json.optString("code", "HTTP_" + status);
-                        callback.onError(new ApiException(status, code, message));
+                        ApiException error = new ApiException(status, code, message);
+                        if (detailedCallback != null) detailedCallback.onError(error);
+                        else if (callback != null) callback.onError(error);
                     }
                 } catch (JSONException e) {
-                    callback.onError(new ApiException(502, "INVALID_API_RESPONSE", "La API devolvió una respuesta no válida."));
+                    ApiException error = new ApiException(502, "INVALID_API_RESPONSE", "La API devolvió una respuesta no válida.");
+                    if (detailedCallback != null) detailedCallback.onError(error);
+                    else if (callback != null) callback.onError(error);
                 } catch (Exception e) {
-                    callback.onError(new ApiException(0, "NETWORK_ERROR", "No se pudo conectar con API DEZGRE V1."));
+                    ApiException error = new ApiException(0, "NETWORK_ERROR", "No se pudo conectar con API DEZGRE V1.");
+                    if (detailedCallback != null) detailedCallback.onError(error);
+                    else if (callback != null) callback.onError(error);
                 } finally {
                     if (connection != null) connection.disconnect();
                 }
