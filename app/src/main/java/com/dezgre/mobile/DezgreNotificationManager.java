@@ -60,6 +60,9 @@ final class DezgreNotificationManager {
     static boolean showPayload(Context context, JSONObject payload) {
         MobileNotificationEvent event = MobileNotificationEvent.fromJson(payload);
         if (event == null) return false;
+        if (!hasPermission(context)) return false;
+        NotificationConfig config = new NotificationConfigStore(context).get(event.storeId, event.eventType);
+        if (!config.enabled) return false;
         if (!new NotificationEventDeduplicator(context).markIfNew(event.eventId)) return false;
         return showEvent(context, event);
     }
