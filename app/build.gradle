@@ -2,12 +2,18 @@ plugins {
     id 'com.android.application'
 }
 
+// google-services is activated only when the Firebase project config is present.
+// This keeps CI/builds honest instead of inventing Firebase identifiers.
+if (file('google-services.json').exists()) {
+    apply plugin: 'com.google.gms.google-services'
+}
+
 def previewKeystore = System.getenv('DEZGRE_PREVIEW_KEYSTORE')
 def previewStorePassword = System.getenv('DEZGRE_PREVIEW_STORE_PASSWORD') ?: 'dezgre-preview-v1'
 def previewKeyAlias = System.getenv('DEZGRE_PREVIEW_KEY_ALIAS') ?: 'dezgre-preview'
 def previewKeyPassword = System.getenv('DEZGRE_PREVIEW_KEY_PASSWORD') ?: 'dezgre-preview-v1'
 def buildVersionCode = (System.getenv('DEZGRE_VERSION_CODE') ?: '2').toInteger()
-def buildVersionName = '0.1.15'
+def buildVersionName = '0.1.16'
 
 android {
     namespace 'com.dezgre.mobile'
@@ -50,4 +56,9 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    implementation platform('com.google.firebase:firebase-bom:34.19.0')
+    implementation 'com.google.firebase:firebase-messaging'
 }
