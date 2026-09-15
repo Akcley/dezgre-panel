@@ -1,76 +1,57 @@
 from pathlib import Path
 
-path = Path("app/src/main/java/com/dezgre/mobile/MainActivity.java")
-source = path.read_text(encoding="utf-8")
+main_path = Path("app/src/main/java/com/dezgre/mobile/MainActivity.java")
+source = main_path.read_text(encoding="utf-8")
 changed = False
 
-old_routes = '''        if ("products".equals(tab)) loadProducts();
+
+def replace_once(old: str, new: str, label: str):
+    global source, changed
+    if new in source:
+        return
+    if source.count(old) != 1:
+        raise SystemExit(f"Unexpected {label} state; old={source.count(old)}")
+    source = source.replace(old, new, 1)
+    changed = True
+
+
+replace_once(
+    '''        if ("products".equals(tab)) loadProducts();
         else if ("profile".equals(tab)) loadProfile();
         else if ("home".equals(tab)) loadHome();
-        else showUnavailableSection(tab);'''
-new_routes = '''        if ("products".equals(tab)) loadProducts();
+        else showUnavailableSection(tab);''',
+    '''        if ("products".equals(tab)) loadProducts();
         else if ("profile".equals(tab)) loadProfile();
         else if ("home".equals(tab)) loadHome();
         else if ("panel".equals(tab)) loadDashboard();
         else if ("orders".equals(tab)) loadOrders();
-        else showUnavailableSection(tab);'''
+        else showUnavailableSection(tab);''',
+    "fallback routes",
+)
 
-old_count = source.count(old_routes)
-new_count = source.count(new_routes)
-if new_count == 1 and old_count == 0:
-    print("Mobile fallback routes already wired")
-elif old_count == 1 and new_count == 0:
-    source = source.replace(old_routes, new_routes, 1)
-    changed = True
-    print("Mobile fallback routes patched")
-else:
-    raise SystemExit(
-        f"Unexpected mobile route state: old={old_count}, new={new_count}; refusing broad rewrite"
-    )
-
-old_startup = '''        if (bearer == null) {
+replace_once(
+    '''        if (bearer == null) {
             showLogin(null);
         } else {
             validateSession();
-        }'''
-new_startup = '''        if (bearer == null) {
+        }''',
+    '''        if (bearer == null) {
             showLogin(null);
         } else {
             openRealPanel();
-        }'''
+        }''',
+    "saved-session startup",
+)
 
-old_startup_count = source.count(old_startup)
-new_startup_count = source.count(new_startup)
-if new_startup_count == 1 and old_startup_count == 0:
-    print("Saved session already enters real panel directly")
-elif old_startup_count == 1 and new_startup_count == 0:
-    source = source.replace(old_startup, new_startup, 1)
-    changed = True
-    print("Removed duplicate /me roundtrip from cold start")
-else:
-    raise SystemExit(
-        f"Unexpected startup state: old={old_startup_count}, new={new_startup_count}; refusing broad rewrite"
-    )
-
-old_persist = '''            tokenStore.save(access);
+replace_once(
+    '''            tokenStore.save(access);
             bearer = access;
-            validateSession();'''
-new_persist = '''            tokenStore.save(access);
+            validateSession();''',
+    '''            tokenStore.save(access);
             bearer = access;
-            openRealPanel();'''
-
-old_persist_count = source.count(old_persist)
-new_persist_count = source.count(new_persist)
-if new_persist_count == 1 and old_persist_count == 0:
-    print("Fresh login already enters real panel directly")
-elif old_persist_count == 1 and new_persist_count == 0:
-    source = source.replace(old_persist, new_persist, 1)
-    changed = True
-    print("Removed duplicate /me roundtrip after login/store selection")
-else:
-    raise SystemExit(
-        f"Unexpected persist state: old={old_persist_count}, new={new_persist_count}; refusing broad rewrite"
-    )
+            openRealPanel();''',
+    "fresh-login startup",
+)
 
 field_marker = "    private boolean drawerOpen = false;"
 push_field = "    private boolean notificationPermissionResolvedThisLaunch = false;"
@@ -79,7 +60,6 @@ if push_field not in source:
         raise SystemExit("MainActivity drawer field marker missing")
     source = source.replace(field_marker, field_marker + "\n" + push_field, 1)
     changed = True
-    print("Inserted notification permission launch state")
 
 method_signature = "    private void openRealPanel() {"
 validate_signature = "    private void validateSession() {"
@@ -89,8 +69,6 @@ method = '''    private void openRealPanel() {
             return;
         }
 
-        // Android 13+: resolve notification permission while MainActivity is still
-        // foreground. Starting the WebView activity first can hide/suppress the prompt.
         if (android.os.Build.VERSION.SDK_INT >= 33
                 && !DezgreNotificationManager.hasPermission(this)
                 && !notificationPermissionResolvedThisLaunch) {
@@ -102,10 +80,6 @@ method = '''    private void openRealPanel() {
         PushDiagnosticsStore diagnostics = new PushDiagnosticsStore(this);
         diagnostics.recordPermission(DezgreNotificationManager.hasPermission(this));
         diagnostics.recordFirebaseServiceState();
-
-        // This is the real production bootstrap path. Force token acquisition and the
-        // scoped idempotent PUT on every session restore/login; backend UPSERT prevents
-        // duplicates and derives user/store exclusively from the Bearer.
         PushRegistrationCoordinator.ensureRegistered(this, bearer, null);
 
         FrameLayout launchSurface = new FrameLayout(this);
@@ -147,7 +121,7 @@ method = '''    private void openRealPanel() {
                         showMain("home");
                         android.widget.Toast.makeText(
                                 MainActivity.this,
-                                "No se pudo abrir el panel web. Se activó el modo de respaldo.",
+                                "No se pudo abrir DEZGRE. Inténtalo nuevamente.",
                                 android.widget.Toast.LENGTH_SHORT
                         ).show();
                     }
@@ -167,77 +141,20 @@ method = '''    private void openRealPanel() {
 
 '''
 
-method_count = source.count(method_signature)
-if method_count == 0:
-    marker_count = source.count(validate_signature)
-    if marker_count != 1:
-        raise SystemExit(f"Expected one validateSession marker, found {marker_count}")
+if method_signature not in source:
+    if source.count(validate_signature) != 1:
+        raise SystemExit("validateSession marker missing")
     source = source.replace(validate_signature, method + validate_signature, 1)
     changed = True
-    print("Inserted optimized exact web panel bootstrap with push registration")
-elif method_count == 1:
+elif "PushRegistrationCoordinator.ensureRegistered(this, bearer, null);" not in source[
+        source.index(method_signature):source.index(validate_signature, source.index(method_signature))]:
     start = source.index(method_signature)
     end = source.index(validate_signature, start)
-    existing = source[start:end]
-    if "PushRegistrationCoordinator.ensureRegistered(this, bearer, null);" not in existing:
-        source = source[:start] + method + source[end:]
-        changed = True
-        print("Upgraded real panel bootstrap with push registration")
-    else:
-        print("Real panel bootstrap already includes push registration")
-else:
-    raise SystemExit(f"Unexpected openRealPanel count: {method_count}")
+    source = source[:start] + method + source[end:]
+    changed = True
 
-if changed:
-    path.write_text(source, encoding="utf-8")
-    print("MainActivity generated source updated safely")
-else:
-    print("MainActivity generated source already up to date")
-
-# Stable native-app identity for NEXT. Preserve the stock Android WebView UA and append
-# one invariant marker; never replace the browser UA wholesale.
-panel_path = Path("app/src/main/java/com/dezgre/mobile/PanelWebActivity.java")
-panel_source = panel_path.read_text(encoding="utf-8")
-old_ua = '''        String userAgent = settings.getUserAgentString();
-        if (userAgent == null) userAgent = "Android WebView";
-        if (!userAgent.contains("DEZGRE-Mobile/")) {
-            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.14");
-        }'''
-new_ua = '''        String userAgent = settings.getUserAgentString();
-        if (userAgent == null) userAgent = "Android WebView";
-        final String dezgreMobileMarker = "DEZGRE-Mobile/Android";
-        if (!userAgent.contains(dezgreMobileMarker)) {
-            settings.setUserAgentString(userAgent + " " + dezgreMobileMarker);
-        }'''
-if panel_source.count(new_ua) == 1:
-    print("Stable DEZGRE Mobile WebView UA marker already present")
-elif panel_source.count(old_ua) == 1:
-    panel_source = panel_source.replace(old_ua, new_ua, 1)
-    panel_path.write_text(panel_source, encoding="utf-8")
-    print("Added stable DEZGRE-Mobile/Android marker to stock WebView UA")
-else:
-    raise SystemExit("Unexpected PanelWebActivity UA state; refusing broad rewrite")
-
-# Android status-bar notification icon must be a white-on-transparent monochrome resource.
-# Keep the full-color official DEZGRE asset for launcher/adaptive icon only.
-notification_path = Path("app/src/main/java/com/dezgre/mobile/DezgreNotificationManager.java")
-notification_source = notification_path.read_text(encoding="utf-8")
-old_small_icon = "        builder.setSmallIcon(R.drawable.ic_launcher)"
-new_small_icon = "        builder.setSmallIcon(R.drawable.ic_notification_dezgre)"
-if new_small_icon in notification_source:
-    print("Official DEZGRE monochrome notification smallIcon already wired")
-elif notification_source.count(old_small_icon) == 1:
-    notification_source = notification_source.replace(old_small_icon, new_small_icon, 1)
-    notification_path.write_text(notification_source, encoding="utf-8")
-    print("Wired official DEZGRE monochrome notification smallIcon")
-else:
-    raise SystemExit("Unexpected notification smallIcon state; refusing broad rewrite")
-
-# Production presentation: internal push diagnostics stay available to code, but no
-# protocol/provider/debug wording is rendered to the user from the native fallback UI.
-ui_path = Path("app/src/main/java/com/dezgre/mobile/MainActivity.java")
-ui_source = ui_path.read_text(encoding="utf-8")
-ui_replacements = {
+# Human-facing cleanup. Internal protocol identifiers remain untouched outside rendered copy.
+replacements = {
     '"Controla el permiso de Android y verifica el estado FCM de este teléfono."':
         '"Controla los avisos de DEZGRE en este teléfono."',
     '''        String fcmLabel = PushRegistrationCoordinator.isFirebaseConfigured(this)
@@ -254,8 +171,7 @@ ui_replacements = {
                 "Notificaciones activas".equals(notificationLabel) ? SUCCESS : MUTED, false));''',
     '"La prueba local valida el canal nativo. El registro remoto se realiza automáticamente al validar la sesión."':
         '"Puedes comprobar los avisos del teléfono o sincronizarlos manualmente cuando lo necesites."',
-    'button("Sincronizar FCM ahora", false)':
-        'button("Sincronizar notificaciones", false)',
+    'button("Sincronizar FCM ahora", false)': 'button("Sincronizar notificaciones", false)',
     'notificationStatus.setText("Sincronizando FCM con API V1…");':
         'notificationStatus.setText("Sincronizando notificaciones…");',
     '''notificationStatus.setText(success
@@ -272,32 +188,83 @@ ui_replacements = {
         'showLogin("No se pudo iniciar la sesión de la tienda.");',
     '"No se pudo abrir el panel web. Se activó el modo de respaldo."':
         '"No se pudo abrir DEZGRE. Inténtalo nuevamente."',
+    '"La misma cuenta de DEZGRE, ahora en una experiencia móvil conectada solo a API V1."':
+        '"La misma cuenta de DEZGRE, ahora en una experiencia móvil."',
+    '"La contraseña no se guarda. Tu sesión queda protegida con Android Keystore."':
+        '"La contraseña no se guarda en este dispositivo."',
+    '"La API no devolvió una sesión utilizable."':
+        '"No se pudo iniciar la sesión. Inténtalo nuevamente."',
+    '"Esta sección ya existe en DEZGRE Web. En Mobile quedará operativa cuando su contrato público esté disponible en API V1; mientras tanto permanece separada para no mezclarla con Inicio ni inventar datos."':
+        '"Esta sección ya existe en DEZGRE Web. En Mobile estará disponible próximamente; mientras tanto permanece separada para mantener una experiencia clara."',
+    '"Data de producto disponible mediante Bubble API V1."':
+        '"Consulta y revisa la información de tus productos."',
+    '"Información disponible mediante Bubble API V1."':
+        '"Información actual de tu producto."',
+    '"Datos calculados directamente por API V1 para tu usuario y tienda."':
+        '"Datos actualizados para tu usuario y tienda."',
+    '"API V1 no devolvió pedidos dentro de tu alcance actual."':
+        '"No hay pedidos dentro de tu alcance actual."',
+    '"Información real obtenida de API V1."':
+        '"Información actual de este pedido."',
 }
-ui_changed = False
-for old, new in ui_replacements.items():
-    if new in ui_source:
+
+for old, new in replacements.items():
+    if new in source:
         continue
-    if old not in ui_source:
-        raise SystemExit(f"Expected production UI text not found: {old[:80]}")
-    ui_source = ui_source.replace(old, new)
-    ui_changed = True
+    if old not in source:
+        raise SystemExit(f"Expected presentation text not found: {old[:90]}")
+    source = source.replace(old, new)
+    changed = True
 
 for forbidden in (
-    "Sincronizar FCM ahora",
+    "Sincronizar FCM",
     "Sincronizando FCM",
     "FCM registrado correctamente",
     "FCM no pudo registrarse",
     "Firebase pendiente",
     "Push: ",
-    "API V1 (",
+    "API V1",
+    "Bubble API",
+    "Android Keystore",
+    "La API no devolvió",
     " · build ",
     "No se recibió el Bearer de tienda",
 ):
-    if forbidden in ui_source:
+    if forbidden in source:
         raise SystemExit(f"Technical user-facing text remains in MainActivity: {forbidden}")
 
-if ui_changed:
-    ui_path.write_text(ui_source, encoding="utf-8")
-    print("Production-facing Android text sanitized")
-else:
-    print("Production-facing Android text already sanitized")
+if changed:
+    main_path.write_text(source, encoding="utf-8")
+print("MainActivity production presentation audit PASS")
+
+# Stable native-app identity: preserve stock WebView UA and append one invariant marker.
+panel_path = Path("app/src/main/java/com/dezgre/mobile/PanelWebActivity.java")
+panel_source = panel_path.read_text(encoding="utf-8")
+old_ua = '''        String userAgent = settings.getUserAgentString();
+        if (userAgent == null) userAgent = "Android WebView";
+        if (!userAgent.contains("DEZGRE-Mobile/")) {
+            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.14");
+        }'''
+new_ua = '''        String userAgent = settings.getUserAgentString();
+        if (userAgent == null) userAgent = "Android WebView";
+        final String dezgreMobileMarker = "DEZGRE-Mobile/Android";
+        if (!userAgent.contains(dezgreMobileMarker)) {
+            settings.setUserAgentString(userAgent + " " + dezgreMobileMarker);
+        }'''
+if new_ua not in panel_source:
+    if panel_source.count(old_ua) != 1:
+        raise SystemExit("Unexpected PanelWebActivity UA state")
+    panel_source = panel_source.replace(old_ua, new_ua, 1)
+    panel_path.write_text(panel_source, encoding="utf-8")
+print("Stable DEZGRE-Mobile/Android UA marker PASS")
+
+notification_path = Path("app/src/main/java/com/dezgre/mobile/DezgreNotificationManager.java")
+notification_source = notification_path.read_text(encoding="utf-8")
+old_small_icon = "        builder.setSmallIcon(R.drawable.ic_launcher)"
+new_small_icon = "        builder.setSmallIcon(R.drawable.ic_notification_dezgre)"
+if new_small_icon not in notification_source:
+    if notification_source.count(old_small_icon) != 1:
+        raise SystemExit("Unexpected notification smallIcon state")
+    notification_source = notification_source.replace(old_small_icon, new_small_icon, 1)
+    notification_path.write_text(notification_source, encoding="utf-8")
+print("Official DEZGRE notification smallIcon PASS")
