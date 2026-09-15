@@ -9,8 +9,10 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.Window;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
@@ -60,6 +62,21 @@ public final class PanelWebActivity extends Activity {
         webView.setVerticalScrollBarEnabled(false);
         webView.setHorizontalScrollBarEnabled(false);
         webView.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
+        webView.setNestedScrollingEnabled(true);
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        webView.setOnTouchListener((view, event) -> {
+            ViewParent parent = view.getParent();
+            if (parent != null) {
+                int action = event.getActionMasked();
+                if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE) {
+                    parent.requestDisallowInterceptTouchEvent(true);
+                } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    parent.requestDisallowInterceptTouchEvent(false);
+                }
+            }
+            return false;
+        });
         if (Build.VERSION.SDK_INT >= 26) {
             webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
         }
@@ -118,13 +135,16 @@ public final class PanelWebActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setTextZoom(100);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        if (Build.VERSION.SDK_INT >= 23) {
+            settings.setOffscreenPreRaster(true);
+        }
         if (Build.VERSION.SDK_INT >= 21) {
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         }
         String userAgent = settings.getUserAgentString();
         if (userAgent == null) userAgent = "Android WebView";
         if (!userAgent.contains("DEZGRE-Mobile/")) {
-            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.11");
+            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.12");
         }
 
         webView.setWebViewClient(new WebViewClient() {
@@ -227,11 +247,11 @@ public final class PanelWebActivity extends Activity {
     private void applyNativePanelFixes(final WebView view) {
         if (view == null || Build.VERSION.SDK_INT < 19) return;
         String javascript = "(function(){"
-                + "var id='dezgre-native-app-shell-v0111';"
+                + "var id='dezgre-native-app-shell-v0112';"
                 + "var root=document.documentElement,body=document.body;"
                 + "if(!document.getElementById(id)){"
                 + "var s=document.createElement('style');s.id=id;"
-                + "s.textContent='html,body{margin:0!important;background-color:var(--dezgre-app-bg,#f5f5f6)!important}body>div:first-child,#__next,.panelShell,.panelContent{background-color:var(--dezgre-app-bg,#f5f5f6)!important}';"
+                + "s.textContent='html{scroll-behavior:auto!important}html,body,.panelShell,.panelContent,.panelRouteTransition{touch-action:pan-x pan-y!important}html,body{margin:0!important;background-color:var(--dezgre-app-bg,#f5f5f6)!important}body>div:first-child,#__next,.panelShell,.panelContent,.panelRouteTransition{background-color:var(--dezgre-app-bg,#f5f5f6)!important}.panelMobileTopbar{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}.panelRouteTransition{animation:none!important}.panelSidebar{will-change:transform}.panelDrawerBackdrop{will-change:opacity}';"
                 + "(document.head||document.documentElement).appendChild(s);"
                 + "}"
                 + "function syncTheme(){var shell=document.querySelector('.panelShell');var dark=shell&&shell.getAttribute('data-panel-theme')==='dark';var c=dark?'#151516':'#f5f5f6';root.style.setProperty('--dezgre-app-bg',c);root.style.backgroundColor=c;if(body)body.style.backgroundColor=c;return c;}"
@@ -361,6 +381,7 @@ public final class PanelWebActivity extends Activity {
         }
         if (webView != null) {
             webView.stopLoading();
+            webView.setOnTouchListener(null);
             webView.setWebChromeClient(null);
             webView.setWebViewClient(null);
             webView.destroy();
