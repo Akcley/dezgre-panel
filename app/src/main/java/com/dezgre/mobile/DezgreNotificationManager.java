@@ -57,10 +57,6 @@ final class DezgreNotificationManager {
         return new NotificationConfigStore(context).applyRemote(storeId, configs);
     }
 
-    /**
-     * Entry point for the certified push transport (FCM now, APNs equivalent on iOS).
-     * This method never polls and never reaches private web endpoints.
-     */
     static boolean showPayload(Context context, JSONObject payload) {
         MobileNotificationEvent event = MobileNotificationEvent.fromJson(payload);
         if (event == null) return false;
@@ -255,8 +251,8 @@ final class DezgreNotificationManager {
     }
 
     private static String channelName(String eventKey) {
-        if (MobileNotificationEvent.NEW_WEB_ORDER.equals(eventKey)) return "Ventas web";
-        if (MobileNotificationEvent.NEW_AI_ORDER.equals(eventKey)) return "Ventas de NATI";
+        if (MobileNotificationEvent.WEB_ORDER_CREATED.equals(eventKey)) return "Ventas web";
+        if (MobileNotificationEvent.AI_ORDER_CREATED.equals(eventKey)) return "Ventas de NATI";
         if (MobileNotificationEvent.WHATSAPP_CONNECTION_DISCONNECTED.equals(eventKey)) return "WhatsApp desconectado";
         if (MobileNotificationEvent.WHATSAPP_RECONNECT_STARTED.equals(eventKey)) return "Reconexión de WhatsApp";
         if ("whatsapp_message".equals(eventKey)) return "Nuevo mensaje de WhatsApp";
