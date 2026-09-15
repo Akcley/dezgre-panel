@@ -286,6 +286,8 @@ public final class MainActivity extends Activity {
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
                         applyIdentity(json);
+                        DezgreNotificationManager.requestPermission(MainActivity.this);
+                        PushRegistrationCoordinator.ensureRegistered(MainActivity.this, bearer, null);
                         enterAuthenticatedRoute();
                     }
                 });
