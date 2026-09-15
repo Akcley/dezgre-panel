@@ -54,8 +54,8 @@ final class MobilePushRegistration {
     static String statusLabel(Context context, String bearer) {
         SecurePushStore store = new SecurePushStore(context);
         String token = store.loadPushToken();
-        if (token == null || token.isEmpty()) return "Esperando token FCM";
-        return store.needsRegistration(bearer) ? "FCM listo · registro V1 pendiente" : "FCM registrado";
+        if (token == null || token.isEmpty()) return "Configurando notificaciones";
+        return store.needsRegistration(bearer) ? "Listo para sincronizar" : "Notificaciones activas";
     }
 
     private static String appVersion(Context context) {
