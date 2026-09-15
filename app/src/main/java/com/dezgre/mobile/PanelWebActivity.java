@@ -34,6 +34,7 @@ public final class PanelWebActivity extends Activity {
     private ProgressBar progress;
     private ValueCallback<Uri[]> fileChooserCallback;
     private boolean mainFrameCommitted = false;
+    private boolean nativePanelFixesApplied = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -56,7 +57,7 @@ public final class PanelWebActivity extends Activity {
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(13, 13, 15));
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-        webView.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.setVerticalScrollBarEnabled(false);
         webView.setHorizontalScrollBarEnabled(false);
         webView.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
@@ -86,6 +87,7 @@ public final class PanelWebActivity extends Activity {
 
         if (savedInstanceState != null && webView.restoreState(savedInstanceState) != null) {
             mainFrameCommitted = true;
+            nativePanelFixesApplied = true;
             progress.setVisibility(View.GONE);
             return;
         }
@@ -130,7 +132,7 @@ public final class PanelWebActivity extends Activity {
         String userAgent = settings.getUserAgentString();
         if (userAgent == null) userAgent = "Android WebView";
         if (!userAgent.contains("DEZGRE-Mobile/")) {
-            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.13");
+            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.14");
         }
 
         webView.setWebViewClient(new WebViewClient() {
@@ -148,6 +150,7 @@ public final class PanelWebActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 mainFrameCommitted = false;
+                nativePanelFixesApplied = false;
                 progress.setVisibility(View.VISIBLE);
                 progress.setProgress(8);
             }
@@ -156,7 +159,7 @@ public final class PanelWebActivity extends Activity {
             public void onPageCommitVisible(WebView view, String url) {
                 mainFrameCommitted = true;
                 progress.setVisibility(View.GONE);
-                applyNativePanelFixes(view);
+                applyNativePanelFixesOnce(view);
             }
 
             @Override
@@ -164,7 +167,7 @@ public final class PanelWebActivity extends Activity {
                 mainFrameCommitted = true;
                 progress.setProgress(100);
                 progress.setVisibility(View.GONE);
-                applyNativePanelFixes(view);
+                applyNativePanelFixesOnce(view);
                 CookieManager.getInstance().flush();
             }
 
@@ -181,8 +184,9 @@ public final class PanelWebActivity extends Activity {
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onProgressChanged(WebView view, int newProgress) {
+                if (mainFrameCommitted) return;
                 progress.setProgress(Math.max(5, newProgress));
-                if (mainFrameCommitted || newProgress >= 100) {
+                if (newProgress >= 100) {
                     progress.setVisibility(View.GONE);
                 } else {
                     progress.setVisibility(View.VISIBLE);
@@ -230,21 +234,26 @@ public final class PanelWebActivity extends Activity {
         });
     }
 
+    private void applyNativePanelFixesOnce(final WebView view) {
+        if (nativePanelFixesApplied) return;
+        nativePanelFixesApplied = true;
+        applyNativePanelFixes(view);
+    }
+
     private void applyNativePanelFixes(final WebView view) {
         if (view == null || Build.VERSION.SDK_INT < 19) return;
         String javascript = "(function(){"
-                + "var id='dezgre-native-app-shell-v0113';"
+                + "var id='dezgre-native-app-shell-v0114';"
                 + "var root=document.documentElement,body=document.body;"
                 + "if(!document.getElementById(id)){"
                 + "var s=document.createElement('style');s.id=id;"
-                + "s.textContent='html{scroll-behavior:auto!important}html,body{margin:0!important;background-color:var(--dezgre-app-bg,#f5f5f6)!important}body>div:first-child,#__next,.panelShell,.panelContent,.panelRouteTransition{background-color:var(--dezgre-app-bg,#f5f5f6)!important}.panelMobileTopbar{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}.panelRouteTransition{animation:none!important}.panelSidebar{will-change:transform}.panelDrawerBackdrop{will-change:opacity}@media(max-width:1023px){html,body{width:100%!important;height:100%!important;min-height:0!important;overflow:hidden!important;overscroll-behavior:none!important;touch-action:auto!important}body>div:first-child,#__next{height:100%!important;min-height:0!important;overflow:hidden!important}.panelShell{display:flex!important;flex-direction:column!important;width:100%!important;height:100dvh!important;min-height:0!important;overflow:hidden!important;touch-action:auto!important}.panelMobileTopbar{position:relative!important;top:auto!important;flex:0 0 auto!important}.panelContent{position:relative!important;flex:1 1 auto!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior-y:contain!important;touch-action:pan-y!important;-webkit-overflow-scrolling:touch!important}.panelContent>*{touch-action:auto}.panelDrawerBackdrop{touch-action:none}.panelSidebar{touch-action:pan-y!important}}';"
+                + "s.textContent='html{scroll-behavior:auto!important}html,body{margin:0!important;background-color:var(--dezgre-app-bg,#f5f5f6)!important}body>div:first-child,#__next,.panelShell,.panelContent,.panelRouteTransition{background-color:var(--dezgre-app-bg,#f5f5f6)!important}.panelMobileTopbar{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}.panelRouteTransition{animation:none!important}.panelSidebar{will-change:transform}.panelDrawerBackdrop{will-change:opacity}.panelDashboard .internalToolsGrid>a::before{display:none!important}@media(max-width:1023px){html,body{width:100%!important;height:100%!important;min-height:0!important;overflow:hidden!important;overscroll-behavior:none!important;touch-action:auto!important}body>div:first-child,#__next{height:100%!important;min-height:0!important;overflow:hidden!important}.panelShell{display:flex!important;flex-direction:column!important;width:100%!important;height:100dvh!important;min-height:0!important;overflow:hidden!important;touch-action:auto!important}.panelMobileTopbar{position:relative!important;top:auto!important;flex:0 0 auto!important}.panelContent{position:relative!important;flex:1 1 auto!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:none!important;scroll-behavior:auto!important;touch-action:pan-y!important;-webkit-overflow-scrolling:touch!important;will-change:scroll-position!important;scrollbar-width:none!important}.panelContent::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}.panelContent>*{touch-action:auto}.panelDrawerBackdrop{touch-action:none}.panelSidebar{touch-action:pan-y!important}}';"
                 + "(document.head||document.documentElement).appendChild(s);"
                 + "}"
                 + "function syncTheme(){var shell=document.querySelector('.panelShell');var dark=shell&&shell.getAttribute('data-panel-theme')==='dark';var c=dark?'#151516':'#f5f5f6';root.style.setProperty('--dezgre-app-bg',c);root.style.backgroundColor=c;if(body)body.style.backgroundColor=c;return c;}"
                 + "var c=syncTheme();"
                 + "var shell=document.querySelector('.panelShell');"
                 + "if(shell&&!shell.__dezgreThemeObserver){var mo=new MutationObserver(function(){syncTheme();});mo.observe(shell,{attributes:true,attributeFilter:['data-panel-theme']});shell.__dezgreThemeObserver=mo;}"
-                + "var content=document.querySelector('.panelContent');if(content){content.style.webkitOverflowScrolling='touch';}"
                 + "return c;"
                 + "})();";
         view.evaluateJavascript(javascript, value -> {
