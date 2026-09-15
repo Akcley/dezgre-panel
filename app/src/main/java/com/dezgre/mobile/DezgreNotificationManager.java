@@ -73,7 +73,7 @@ final class DezgreNotificationManager {
                 event.storeId,
                 event.eventType,
                 event.resolvedTitle(),
-                event.body,
+                event.resolvedBody(),
                 "",
                 event.eventId,
                 event.routeTab(),
@@ -146,7 +146,7 @@ final class DezgreNotificationManager {
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26
                 ? new Notification.Builder(context, channelId)
                 : new Notification.Builder(context);
-        builder.setSmallIcon(R.drawable.ic_launcher)
+        builder.setSmallIcon(R.drawable.ic_notification_dezgre)
                 .setContentTitle(title == null || title.isEmpty() ? "DEZGRE" : title)
                 .setContentText(body == null ? "" : body)
                 .setStyle(new Notification.BigTextStyle().bigText(body == null ? "" : body))
@@ -196,8 +196,8 @@ final class DezgreNotificationManager {
                 activity,
                 storeId,
                 testEvent,
-                "DEZGRE · Prueba",
-                "Notificación nativa con sonido y vibración habilitados.",
+                "Notificación de prueba",
+                "Las notificaciones de DEZGRE están funcionando correctamente.",
                 "",
                 "local-test-" + System.currentTimeMillis()
         );
@@ -217,14 +217,21 @@ final class DezgreNotificationManager {
 
     private static void ensureChannel(NotificationManager manager, String channelId, NotificationConfig config) {
         if (Build.VERSION.SDK_INT < 26) return;
-        if (manager.getNotificationChannel(channelId) != null) return;
+
+        NotificationChannel existing = manager.getNotificationChannel(channelId);
+        if (existing != null) {
+            existing.setName(channelName(config.eventKey));
+            existing.setDescription(channelDescription(config.eventKey));
+            manager.createNotificationChannel(existing);
+            return;
+        }
 
         NotificationChannel channel = new NotificationChannel(
                 channelId,
                 channelName(config.eventKey),
                 NotificationManager.IMPORTANCE_HIGH
         );
-        channel.setDescription("DEZGRE · " + config.eventKey + " · " + config.soundRevision);
+        channel.setDescription(channelDescription(config.eventKey));
         channel.enableVibration(true);
         channel.setVibrationPattern(DEFAULT_VIBRATION);
         channel.enableLights(true);
@@ -255,13 +262,34 @@ final class DezgreNotificationManager {
 
     private static String channelName(String eventKey) {
         if (MobileNotificationEvent.WEB_ORDER_CREATED.equals(eventKey)) return "Ventas web";
-        if (MobileNotificationEvent.AI_ORDER_CREATED.equals(eventKey)) return "Ventas de NATI";
-        if (MobileNotificationEvent.WHATSAPP_CONNECTION_DISCONNECTED.equals(eventKey)) return "WhatsApp desconectado";
-        if (MobileNotificationEvent.WHATSAPP_RECONNECT_STARTED.equals(eventKey)) return "Reconexión de WhatsApp";
-        if ("whatsapp_message".equals(eventKey)) return "Nuevo mensaje de WhatsApp";
-        if ("support_chat".equals(eventKey)) return "Soporte / Chat Web";
-        if ("mobile_test".equals(eventKey)) return "Prueba de notificaciones";
-        return "DEZGRE · " + eventKey.replace('_', ' ');
+        if (MobileNotificationEvent.AI_ORDER_CREATED.equals(eventKey)) return "Ventas por IA";
+        if (MobileNotificationEvent.WHATSAPP_CONNECTION_DISCONNECTED.equals(eventKey)
+                || MobileNotificationEvent.WHATSAPP_RECONNECT_STARTED.equals(eventKey)) return "WhatsApp";
+        if (MobileNotificationEvent.NOTIFICATION_TEST.equals(eventKey) || "mobile_test".equals(eventKey)) {
+            return "Notificaciones de prueba";
+        }
+        if ("whatsapp_message".equals(eventKey)) return "Mensajes de WhatsApp";
+        if ("support_chat".equals(eventKey)) return "Soporte";
+        return "Notificaciones de DEZGRE";
+    }
+
+    private static String channelDescription(String eventKey) {
+        if (MobileNotificationEvent.WEB_ORDER_CREATED.equals(eventKey)) {
+            return "Nuevos pedidos realizados desde tu tienda web";
+        }
+        if (MobileNotificationEvent.AI_ORDER_CREATED.equals(eventKey)) {
+            return "Nuevos pedidos registrados por tu asistente";
+        }
+        if (MobileNotificationEvent.WHATSAPP_CONNECTION_DISCONNECTED.equals(eventKey)
+                || MobileNotificationEvent.WHATSAPP_RECONNECT_STARTED.equals(eventKey)) {
+            return "Estado de tus conexiones de WhatsApp";
+        }
+        if (MobileNotificationEvent.NOTIFICATION_TEST.equals(eventKey) || "mobile_test".equals(eventKey)) {
+            return "Comprueba que los avisos de DEZGRE funcionan correctamente";
+        }
+        if ("whatsapp_message".equals(eventKey)) return "Nuevos mensajes recibidos en WhatsApp";
+        if ("support_chat".equals(eventKey)) return "Nuevos mensajes de soporte";
+        return "Avisos importantes de DEZGRE";
     }
 
     private static boolean isConnectionEvent(String eventType) {
