@@ -43,6 +43,14 @@ public final class ApiClient {
         request("POST", path, bearer, body, callback);
     }
 
+    public void put(final String path, final String bearer, final JSONObject body, final Callback callback) {
+        request("PUT", path, bearer, body, callback);
+    }
+
+    public void delete(final String path, final String bearer, final Callback callback) {
+        request("DELETE", path, bearer, null, callback);
+    }
+
     private void request(
             final String method,
             final String path,
@@ -62,7 +70,7 @@ public final class ApiClient {
                     connection.setReadTimeout(READ_TIMEOUT_MS);
                     connection.setUseCaches(false);
                     connection.setRequestProperty("Accept", "application/json");
-                    connection.setRequestProperty("User-Agent", "DEZGRE-Mobile/0.1.0 Android");
+                    connection.setRequestProperty("User-Agent", "DEZGRE-Mobile Android");
                     if (bearer != null && !bearer.trim().isEmpty()) {
                         connection.setRequestProperty("Authorization", "Bearer " + bearer.trim());
                     }
