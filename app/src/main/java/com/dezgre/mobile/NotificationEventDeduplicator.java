@@ -5,7 +5,9 @@ import android.content.SharedPreferences;
 
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 final class NotificationEventDeduplicator {
     private static final Object LOCK = new Object();
@@ -51,12 +53,14 @@ final class NotificationEventDeduplicator {
     }
 
     private void pruneExpired(JSONObject seen, long now) {
+        List<String> expired = new ArrayList<>();
         Iterator<String> keys = seen.keys();
         while (keys.hasNext()) {
             String key = keys.next();
             long timestamp = seen.optLong(key, 0L);
-            if (timestamp <= 0L || now - timestamp > TTL_MS) keys.remove();
+            if (timestamp <= 0L || now - timestamp > TTL_MS) expired.add(key);
         }
+        for (String key : expired) seen.remove(key);
     }
 
     private void trimOldest(JSONObject seen) {
