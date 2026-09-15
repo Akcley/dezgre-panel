@@ -7,7 +7,7 @@ def previewStorePassword = System.getenv('DEZGRE_PREVIEW_STORE_PASSWORD') ?: 'de
 def previewKeyAlias = System.getenv('DEZGRE_PREVIEW_KEY_ALIAS') ?: 'dezgre-preview'
 def previewKeyPassword = System.getenv('DEZGRE_PREVIEW_KEY_PASSWORD') ?: 'dezgre-preview-v1'
 def buildVersionCode = (System.getenv('DEZGRE_VERSION_CODE') ?: '2').toInteger()
-def buildVersionName = '0.1.6'
+def buildVersionName = '0.1.7'
 
 android {
     namespace 'com.dezgre.mobile'

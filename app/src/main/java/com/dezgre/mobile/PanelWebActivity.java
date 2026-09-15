@@ -56,6 +56,8 @@ public final class PanelWebActivity extends Activity {
         webView.setBackgroundColor(Color.rgb(245, 245, 246));
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        webView.setVerticalScrollBarEnabled(false);
+        webView.setHorizontalScrollBarEnabled(false);
         root.addView(webView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -111,14 +113,13 @@ public final class PanelWebActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setTextZoom(100);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        if (Build.VERSION.SDK_INT >= 23) settings.setOffscreenPreRaster(true);
         if (Build.VERSION.SDK_INT >= 21) {
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         }
         String userAgent = settings.getUserAgentString();
         if (userAgent == null) userAgent = "Android WebView";
         if (!userAgent.contains("DEZGRE-Mobile/")) {
-            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.6");
+            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.7");
         }
 
         webView.setWebViewClient(new WebViewClient() {
@@ -220,13 +221,18 @@ public final class PanelWebActivity extends Activity {
 
     private void applyNativePanelFixes(WebView view) {
         if (view == null || Build.VERSION.SDK_INT < 19) return;
-        String javascript = "(function(){"
-                + "var id='dezgre-native-app-fixes-v016';"
+        String javascript = "(function(){
+                + "var id='dezgre-native-app-fixes-v017';"
                 + "if(!document.getElementById(id)){"
                 + "var s=document.createElement('style');s.id=id;"
-                + "s.textContent='@media(max-width:1023px){html,body,.panelShell{min-height:100%!important}.panelSidebar{position:fixed!important;top:0!important;right:auto!important;bottom:0!important;height:auto!important;min-height:100vh!important;min-height:100dvh!important;max-height:none!important;box-sizing:border-box!important;overscroll-behavior:contain!important;padding-bottom:max(18px,env(safe-area-inset-bottom))!important}}';"
+                + "s.textContent='html{min-height:100%!important;overscroll-behavior-y:none!important;scroll-behavior:auto!important}body{min-height:100vh!important;min-height:100dvh!important;margin:0!important;overscroll-behavior-y:none!important}.panelShell{min-height:100vh!important;min-height:100dvh!important}.panelShell[data-panel-theme=dark],.panelShell[data-panel-theme=dark] .panelContent{background:#151516!important}.panelRouteTransition{animation:dezgreMobileRouteIn .18s cubic-bezier(.2,.72,.3,1)!important;will-change:opacity,transform}.panelMobileTopbar{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.natiVisualBubble{animation:dezgreMobileNatiFloat 4.8s ease-in-out infinite!important;will-change:transform!important;transform:translateZ(0);backface-visibility:hidden;box-shadow:0 8px 22px rgba(0,0,0,.16)!important}.natiVisualPanel{animation:dezgreMobileNatiIn .18s cubic-bezier(.2,.8,.2,1)!important;will-change:opacity,transform!important;transform:translateZ(0);backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:0 14px 34px rgba(0,0,0,.16)!mportant}[class*=nati i],[class*=nati i] *{backdrop-filter:none!important;-Webkit-backdrop-filter:none!important}.dezgre-mobile-paused .natiVisualBubble{animation-play-state:paused!important}@keyframes dezgreMobileRouteIn{from{alpha:.72;transform:translate3d(0,5px,0)}to{opacity:1;transform:translate3d(0,0,0)}}@keyframes dezgreMobileNatiFloat{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(0,-3px,0)}}@keyframes dezgreMobileNatiIn{from{opacity:0;transform:translate3d(0,8px,0) scale(.99)}to{opacity:1;transform:translate3d(0,0,0) scale(1)}}@media(max-width:1023px){.panelSidebar{position:fixed!important;top:0!important;right:auto!important;bottom:0!important;height:auto!important;min-height:100vh!important;min-height:100dvh!important;max-height:none!important;box-sizing:border-box!important;overscroll-behavior:contain!important;padding-bottom:max(18px,env(safe-area-inset-bottom))!important;transition:transform .22s cubic-bezier(.2,.8,.2,1)!important}.panelContent{min-height:calc(100dvh - 58px)!important}.panelSidebar nav a,.panelShell button{touch-action:manipulation}.panelSidebar nav a:active,.panelShell button:active{transform:scale(.985)!important}}';"
                 + "(document.head||document.documentElement).appendChild(s);"
                 + "}"
+                + "var root=document.documentElement,body=document.body,shell=document.querySelector('.panelShell');"
+                + "function syncTheme(){shell=document.querySelector('.panelShell');var dark=shell&&shell.getAttribute('data-panel-theme')==='dark';var c=dark?'#151516':'#f5f5f6';root.style.backgroundColor=c;if(body)body.style.backgroundColor=c;if(shell)shell.style.minHeight='100dvh';}"
+                + "syncTheme();"
+                + "if(shell&&!shell.__dezgreThemeObserver){var mo=new MutationObserver(syncTheme);mo.observe(shell,{attributes:true,attributeFilter:['data-panel-theme']});shell.__dezgreThemeObserver=mo;}"
+                + "if(!document.__dezgreVisibilityHook){document.__dezgreVisibilityHook=true;document.addEventListener('visibilitychange',function(){root.classList.toggle('dezgre-mobile-paused',document.hidden);});}"
                 + "})();";
         view.evaluateJavascript(javascript, null);
     }
