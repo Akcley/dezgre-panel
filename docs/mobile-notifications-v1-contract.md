@@ -1,117 +1,164 @@
-# DEZGRE Mobile — contrato de notificaciones V1
+# DEZGRE Mobile — contrato de notificaciones nativas V1
 
-Estado: **cliente Android preparado; endpoints remotos pendientes de certificación en `api.dezgre.com/v1`.**
+Estado: **cliente preparado; transporte push y registro remoto pendientes de contrato certificado en `https://api.dezgre.com/v1`.**
 
-La app nunca debe inventar una preferencia de sonido global. La fuente de verdad es la configuración de **cada tienda** en Configuración → Notificaciones de DEZGRE Web.
+Este contrato no usa cookies web, no contiene `API_AUTH_SECRET`, no consulta la base de datos y no crea endpoints alternativos fuera de API Bubble.
 
-## 1. Identidad de una preferencia
+## Eventos soportados
 
-Cada configuración se resuelve por:
+El cliente acepta únicamente estos `eventType`:
 
-- `store_id`
-- `event_key`
+- `NEW_WEB_ORDER`
+- `NEW_AI_ORDER`
+- `WHATSAPP_CONNECTION_DISCONNECTED`
+- `WHATSAPP_RECONNECT_STARTED`
 
-Ejemplos iniciales de `event_key`:
+Cualquier otro tipo se ignora hasta que exista un contrato V1 explícito.
 
-- `whatsapp_message` → Nuevo mensaje de WhatsApp
-- `support_chat` → Soporte / Chat Web
+## Payload push requerido
 
-Nuevos eventos pueden agregarse sin recompilar la app siempre que respeten el contrato.
-
-## 2. Configuración que V1 debe entregar a la app
+El backend debe entregar el mismo payload semántico a FCM y APNs:
 
 ```json
 {
-  "event_key": "whatsapp_message",
-  "enabled": true,
-  "sound_mode": "custom",
-  "sound_name": "whatsapp_computer.mp3",
-  "sound_url": "https://.../whatsapp_computer.mp3",
-  "sound_revision": "sha256-o-version-inmutable"
+  "schemaVersion": 1,
+  "eventId": "evt_01J...",
+  "eventType": "NEW_WEB_ORDER",
+  "storeId": "42",
+  "title": "Nueva venta web",
+  "body": "Pedido de S/159 en NATIVA",
+  "resourceId": "order_uuid_or_id",
+  "occurredAt": "2026-09-15T08:00:00Z"
 }
 ```
 
-Campos:
+Reglas:
 
-- `enabled`: permite o bloquea el aviso para ese evento.
-- `sound_mode`: `default`, `custom` o `silent`.
-- `sound_name`: nombre visible configurado por el administrador.
-- `sound_url`: URL autenticada o firmada del MP3 cuando sea `custom`.
-- `sound_revision`: cambia cada vez que cambia el audio o su comportamiento. Es obligatorio para invalidar caché/canal Android.
+- `eventId` es obligatorio, único e inmutable. El cliente lo usa para deduplicación persistente.
+- `eventType` debe ser uno de los cuatro valores anteriores.
+- `storeId` es obligatorio. El cliente evita abrir un recurso si la sesión activa pertenece a otra tienda.
+- `title` y `body` son texto de presentación generado por backend. La app no reconstruye montos, nombres de tienda ni datos comerciales.
+- `resourceId` es opcional. Para ventas debe ser el ID real del pedido cuando backend lo conozca. Para conexiones puede omitirse mientras no exista un detalle móvil certificado.
+- `occurredAt` es opcional para presentación/diagnóstico; nunca reemplaza a `eventId` como llave de deduplicación.
 
-La app guarda esta configuración localmente por `store_id + event_key`. Un cambio en web debe sincronizarse sin publicar un APK nuevo.
+La app **no acepta un URL/deep-link arbitrario enviado por backend**. La ruta se deriva localmente:
 
-## 3. Registro de dispositivo requerido
+- `NEW_WEB_ORDER` / `NEW_AI_ORDER` → `Pedidos`; si existe `resourceId`, abre el detalle real `/orders/{id}` que ya consume Mobile.
+- `WHATSAPP_CONNECTION_DISCONNECTED` / `WHATSAPP_RECONNECT_STARTED` → `Conexiones`; mientras ese módulo no tenga contrato V1 propio, se abre la ruta reservada sin inventar datos.
 
-V1 debe exponer una operación autenticada para registrar/actualizar un dispositivo del usuario actual. El servidor debe poder guardar varios dispositivos por usuario.
+## Registro de dispositivo que NEXT debe entregar
 
-Datos mínimos:
+Falta una operación autenticada bajo `/v1` para **upsert de dispositivo push**. El nombre/path exacto lo debe definir NEXT; Mobile no lo inventa.
+
+Semántica requerida de la operación `REGISTER_PUSH_DEVICE`:
+
+- método recomendado: `POST` o `PUT` idempotente;
+- autenticación: `Authorization: Bearer <access_token>` actual;
+- el backend deriva usuario y tienda desde el Bearer; el cliente no puede registrar un token para otra tienda arbitrariamente;
+- upsert lógico por `(usuario, tienda, platform, deviceId)`;
+- una rotación de token actualiza el mismo dispositivo en vez de crear duplicados.
+
+Body Android:
 
 ```json
 {
   "platform": "android",
-  "push_token": "FCM_TOKEN",
-  "app_version": "0.1.0",
-  "device_id": "ID_GENERADO_POR_LA_APP"
+  "provider": "fcm",
+  "pushToken": "FCM_TOKEN",
+  "deviceId": "uuid-generado-por-la-app",
+  "appVersion": "0.1.15-preview"
 }
 ```
 
-El Bearer actual determina usuario y tienda; el cliente no debe poder registrar tokens en otra tienda arbitraria.
-
-## 4. Payload push
-
-El transporte push debe enviar datos, no decidir la preferencia final de sonido en el servidor:
+Body iOS:
 
 ```json
 {
-  "schema_version": 1,
-  "notification_id": "evt_123",
-  "store_id": "42",
-  "event_key": "whatsapp_message",
-  "title": "Nuevo mensaje de WhatsApp",
-  "body": "Tienes un mensaje nuevo",
-  "deep_link": "dezgre://whatsapp/conversation/123"
+  "platform": "ios",
+  "provider": "apns",
+  "pushToken": "APNS_DEVICE_TOKEN",
+  "deviceId": "uuid-generado-por-la-app",
+  "appVersion": "x.y.z"
 }
 ```
 
-La app recibe `event_key`, consulta la configuración cacheada de esa tienda y decide si mostrar, silenciar o reproducir el sonido configurado.
+Respuesta mínima requerida:
 
-## 5. Sonidos personalizados en Android
+```json
+{
+  "ok": true
+}
+```
 
-Android 8+ fija el sonido de un canal una vez creado. Por eso DEZGRE Mobile crea canales versionados usando `store_id + event_key + sound_revision`.
+Mobile solo marcará el token como registrado después de una respuesta 2xx válida.
 
-Para MP3 subidos por el administrador, la fase de sincronización deberá:
+También hace falta una operación autenticada `UNREGISTER_PUSH_DEVICE` bajo `/v1` para cerrar sesión/revocar el dispositivo. El path lo define NEXT. Body mínimo:
 
-1. descargar/verificar el MP3 indicado por V1;
-2. guardarlo con una URI local accesible de forma segura;
-3. guardar esa `local_sound_uri` junto con la configuración cacheada;
-4. crear el canal correspondiente a la nueva `sound_revision`;
-5. dejar de usar la revisión anterior para eventos futuros.
+```json
+{
+  "platform": "android",
+  "deviceId": "uuid-generado-por-la-app"
+}
+```
 
-Nunca se debe incrustar el MP3 elegido por una tienda dentro del APK.
+En iOS el mismo contrato usa `platform: "ios"`.
 
-## 6. Estado implementado en Android
+## Android preparado
 
-Ya existe en la app:
+Ya existe en el cliente:
 
 - permiso `POST_NOTIFICATIONS` para Android 13+;
-- caché por tienda y evento;
-- modelo de configuración dinámico;
-- canales versionados por revisión de sonido;
-- soporte para `default`, `custom` y `silent`;
-- parser de payload por `store_id + event_key`;
-- deep-link reservado en el `Intent` de la notificación;
-- prueba local desde Perfil.
+- Notification Channels nativos y versionados;
+- cuatro nombres de canal para los eventos operativos;
+- entrada `DezgreNotificationManager.showPayload(...)` para el transporte FCM futuro;
+- parser estricto de `eventId`, `eventType`, `storeId`, `resourceId`;
+- deduplicación persistente por `eventId` con ventana de 7 días y máximo 256 eventos;
+- push token cifrado con Android Keystore (`AES/GCM`);
+- `deviceId` aleatorio UUID estable, sin IMEI ni Android ID;
+- payload de registro listo mediante `MobilePushRegistration.buildRegistrationPayload(...)`;
+- `MainActivity` en `singleTop` para que tocar una notificación reutilice la tarea actual;
+- routing interno seguro a `orders` o `connections`;
+- apertura del detalle real del pedido cuando viene `resourceId`;
+- validación de `storeId` antes de abrir el recurso.
 
-Aún falta, y no debe simularse hasta que V1 lo exponga:
+No se añadió `FirebaseMessagingService` todavía porque faltan el proyecto/configuración FCM certificada y el endpoint V1 de registro. Cuando existan, el servicio solo deberá:
 
-- credenciales/configuración FCM del proyecto móvil;
-- endpoint V1 de registro de dispositivo/token;
-- endpoint V1 para leer la configuración de notificaciones de la tienda;
-- descarga autenticada/firmada del MP3 personalizado;
-- envío FCM desde el backend/eventos reales;
-- resolución final de deep links dentro de cada módulo móvil.
+1. entregar `onNewToken(token)` a `MobilePushRegistration.acceptTransportToken(...)`;
+2. registrar el token contra la operación V1 entregada por NEXT;
+3. entregar cada data payload a `DezgreNotificationManager.showPayload(...)`.
 
-## Regla de seguridad
+No requiere polling.
 
-La app solo se comunica con `https://api.dezgre.com/v1`. No debe leer la base de datos, cookies de la web ni endpoints internos de `dezgre-system` para obtener la configuración.
+## iOS preparado
+
+Como aún no existe target iOS en este repositorio, se dejó un scaffold compilable para integrar cuando nazca el target:
+
+`ios-scaffold/DEZGRENativeNotifications.swift`
+
+Incluye:
+
+- permiso `UNUserNotificationCenter`;
+- registro para APNs;
+- APNs device token en Keychain;
+- UUID de dispositivo estable;
+- payload de registro equivalente al Android;
+- parser de los cuatro eventos;
+- deduplicación por `eventId`;
+- presentación nativa en foreground;
+- routing a Pedidos/Conexiones al tocar la notificación.
+
+Para recibir con la app cerrada/segundo plano faltan capability/provisioning APNs del target iOS y el envío real desde backend. Las claves privadas APNs permanecen únicamente del lado servidor/infraestructura de build.
+
+## Infraestructura pendiente — bloqueo actual
+
+Mobile se detiene antes de inventar backend. Para cerrar push real faltan exactamente:
+
+1. **Path + método V1 de `REGISTER_PUSH_DEVICE`** con la semántica definida arriba.
+2. **Path + método V1 de `UNREGISTER_PUSH_DEVICE`**.
+3. **Proyecto/configuración FCM Android certificada** para obtener tokens reales en runtime.
+4. **Credenciales FCM servidor** solo en backend/infra; nunca dentro del APK.
+5. **Target iOS + Push Notifications capability + APNs entitlement/provisioning**.
+6. **Clave/certificado APNs servidor** fuera de la app.
+7. Emisión real de los cuatro eventos con `eventId` único y el payload V1 definido aquí.
+
+Hasta que NEXT entregue 1 y 2 y la infraestructura entregue 3–6, el cliente no hace polling, no simula registros remotos y no inventa endpoints.
