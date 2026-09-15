@@ -147,7 +147,7 @@
         notificationCard.addView(gap(7));
         notificationCard.addView(text("Avisos de DEZGRE", 18, TEXT, true));
         notificationCard.addView(gap(5));
-        notificationCard.addView(text("Controla el permiso de Android y prueba el sonido de las notificaciones en este teléfono.", 12, MUTED, false));
+        notificationCard.addView(text("Controla el permiso de Android y verifica el estado FCM de este teléfono.", 12, MUTED, false));
         notificationCard.addView(gap(14));
 
         LinearLayout notifRow = new LinearLayout(this);
@@ -164,24 +164,52 @@
         notifCopy.addView(gap(2));
         notifCopy.addView(text("Permiso: " + DezgreNotificationManager.permissionLabel(this), 11,
                 DezgreNotificationManager.hasPermission(this) ? SUCCESS : MUTED, false));
+        String fcmLabel = PushRegistrationCoordinator.isFirebaseConfigured(this)
+                ? MobilePushRegistration.statusLabel(this, bearer)
+                : "Firebase pendiente: falta google-services.json";
+        notifCopy.addView(gap(2));
+        notifCopy.addView(text("Push: " + fcmLabel, 11,
+                fcmLabel.startsWith("FCM registrado") ? SUCCESS : MUTED, false));
         notifRow.addView(notifCopy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         notificationCard.addView(notifRow);
         notificationCard.addView(gap(12));
 
         final TextView notificationStatus = text(
-                "Usa esta prueba para comprobar que Android reproduce sonido y vibración.",
+                "La prueba local valida el canal nativo. El registro remoto se realiza automáticamente al validar la sesión.",
                 11, MUTED, false);
         notificationCard.addView(notificationStatus);
         notificationCard.addView(gap(10));
+        Button syncPush = button("Sincronizar FCM ahora", false);
+        syncPush.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                notificationStatus.setText("Sincronizando FCM con API V1…");
+                notificationStatus.setTextColor(MUTED);
+                PushRegistrationCoordinator.ensureRegistered(MainActivity.this, bearer,
+                        new PushRegistrationCoordinator.Callback() {
+                            @Override public void onComplete(final boolean success, final String code) {
+                                runOnUiThread(new Runnable() {
+                                    @Override public void run() {
+                                        notificationStatus.setText(success
+                                                ? "FCM registrado correctamente para la tienda actual."
+                                                : "FCM no pudo registrarse: " + code);
+                                        notificationStatus.setTextColor(success ? SUCCESS : DANGER);
+                                    }
+                                });
+                            }
+                        });
+            }
+        });
+        notificationCard.addView(syncPush);
+        notificationCard.addView(gap(8));
         Button testNotification = button(
-                DezgreNotificationManager.hasPermission(this) ? "Probar sonido y notificación" : "Activar notificaciones",
+                DezgreNotificationManager.hasPermission(this) ? "Probar notificación nativa" : "Activar notificaciones",
                 false
         );
         testNotification.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
                 boolean shown = DezgreNotificationManager.showTest(MainActivity.this, notificationStoreId);
                 if (shown) {
-                    notificationStatus.setText("Prueba enviada. Debe escucharse y vibrar si el teléfono tiene activo el volumen de notificaciones.");
+                    notificationStatus.setText("Prueba nativa enviada. Debe escucharse y vibrar si el teléfono lo permite.");
                     notificationStatus.setTextColor(SUCCESS);
                 } else {
                     notificationStatus.setText("Android solicitó permiso. Acéptalo y vuelve a tocar la prueba.");
@@ -193,21 +221,52 @@
         body.addView(notificationCard);
 
         LinearLayout sessionCard = card();
-        Button logout = button("Cerrar sesión en este dispositivo", false);
+        final Button logout = button("Cerrar sesión en este dispositivo", false);
         logout.setTextColor(DANGER);
         logout.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View v) {
-                tokenStore.clear();
-                bearer = null;
-                currentUserAvatar = "";
-                showLogin(null);
+                final String logoutBearer = bearer;
+                if (logoutBearer == null || logoutBearer.trim().isEmpty()) {
+                    tokenStore.clear();
+                    bearer = null;
+                    currentStoreId = "";
+                    currentUserAvatar = "";
+                    showLogin(null);
+                    return;
+                }
+                logout.setEnabled(false);
+                logout.setText("Cerrando sesión…");
+                PushRegistrationCoordinator.unregisterCurrent(MainActivity.this, logoutBearer,
+                        new PushRegistrationCoordinator.Callback() {
+                            @Override public void onComplete(final boolean success, final String code) {
+                                runOnUiThread(new Runnable() {
+                                    @Override public void run() {
+                                        if (!success) {
+                                            logout.setEnabled(true);
+                                            logout.setText("Cerrar sesión en este dispositivo");
+                                            android.widget.Toast.makeText(
+                                                    MainActivity.this,
+                                                    "No se pudo retirar este dispositivo de API V1 (" + code + "). Reintenta el cierre de sesión.",
+                                                    android.widget.Toast.LENGTH_LONG
+                                            ).show();
+                                            return;
+                                        }
+                                        tokenStore.clear();
+                                        bearer = null;
+                                        currentStoreId = "";
+                                        currentUserAvatar = "";
+                                        showLogin(null);
+                                    }
+                                });
+                            }
+                        });
             }
         });
         sessionCard.addView(logout, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)));
         body.addView(sessionCard);
         body.addView(gap(8));
 
-        String versionName = "0.1.3-preview";
+        String versionName = "0.1.16-preview";
         long versionCode = 0;
         try {
             android.content.pm.PackageInfo info = getPackageManager().getPackageInfo(getPackageName(), 0);
@@ -229,6 +288,7 @@
                 if (error.status == 401 || error.status == 403) {
                     tokenStore.clear();
                     bearer = null;
+                    currentStoreId = "";
                     currentUserAvatar = "";
                     showLogin("Tu sesión expiró o ya no tiene acceso.");
                     return;
