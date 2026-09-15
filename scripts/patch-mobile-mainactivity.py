@@ -72,6 +72,15 @@ else:
         f"Unexpected persist state: old={old_persist_count}, new={new_persist_count}; refusing broad rewrite"
     )
 
+field_marker = "    private boolean drawerOpen = false;"
+push_field = "    private boolean notificationPermissionResolvedThisLaunch = false;"
+if push_field not in source:
+    if source.count(field_marker) != 1:
+        raise SystemExit("MainActivity drawer field marker missing")
+    source = source.replace(field_marker, field_marker + "\n" + push_field, 1)
+    changed = True
+    print("Inserted notification permission launch state")
+
 method_signature = "    private void openRealPanel() {"
 validate_signature = "    private void validateSession() {"
 method = '''    private void openRealPanel() {
@@ -80,9 +89,25 @@ method = '''    private void openRealPanel() {
             return;
         }
 
-        // Keep the launch transition deliberately quiet: no second logo, spinner or
-        // loading message. panel-access already validates the Bearer and store access,
-        // so calling /me first only added an unnecessary network roundtrip.
+        // Android 13+: resolve notification permission while MainActivity is still
+        // foreground. Starting the WebView activity first can hide/suppress the prompt.
+        if (android.os.Build.VERSION.SDK_INT >= 33
+                && !DezgreNotificationManager.hasPermission(this)
+                && !notificationPermissionResolvedThisLaunch) {
+            new PushDiagnosticsStore(this).recordPermission(false);
+            DezgreNotificationManager.requestPermission(this);
+            return;
+        }
+
+        PushDiagnosticsStore diagnostics = new PushDiagnosticsStore(this);
+        diagnostics.recordPermission(DezgreNotificationManager.hasPermission(this));
+        diagnostics.recordFirebaseServiceState();
+
+        // This is the real production bootstrap path. Force token acquisition and the
+        // scoped idempotent PUT on every session restore/login; backend UPSERT prevents
+        // duplicates and derives user/store exclusively from the Bearer.
+        PushRegistrationCoordinator.ensureRegistered(this, bearer, null);
+
         FrameLayout launchSurface = new FrameLayout(this);
         launchSurface.setBackgroundColor(BG);
         setContentView(launchSurface);
@@ -119,7 +144,6 @@ method = '''    private void openRealPanel() {
                             showLogin("Tu sesión expiró o ya no tiene acceso.");
                             return;
                         }
-                        // Network/API outage must not make the installed app unusable.
                         showMain("home");
                         android.widget.Toast.makeText(
                                 MainActivity.this,
@@ -132,6 +156,15 @@ method = '''    private void openRealPanel() {
         });
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != DezgreNotificationManager.REQUEST_NOTIFICATIONS) return;
+        notificationPermissionResolvedThisLaunch = true;
+        new PushDiagnosticsStore(this).recordPermission(DezgreNotificationManager.hasPermission(this));
+        openRealPanel();
+    }
+
 '''
 
 method_count = source.count(method_signature)
@@ -141,9 +174,17 @@ if method_count == 0:
         raise SystemExit(f"Expected one validateSession marker, found {marker_count}")
     source = source.replace(validate_signature, method + validate_signature, 1)
     changed = True
-    print("Inserted optimized exact web panel bootstrap")
+    print("Inserted optimized exact web panel bootstrap with push registration")
 elif method_count == 1:
-    print("Optimized exact web panel bootstrap already present")
+    start = source.index(method_signature)
+    end = source.index(validate_signature, start)
+    existing = source[start:end]
+    if "PushRegistrationCoordinator.ensureRegistered(this, bearer, null);" not in existing:
+        source = source[:start] + method + source[end:]
+        changed = True
+        print("Upgraded real panel bootstrap with push registration")
+    else:
+        print("Real panel bootstrap already includes push registration")
 else:
     raise SystemExit(f"Unexpected openRealPanel count: {method_count}")
 
