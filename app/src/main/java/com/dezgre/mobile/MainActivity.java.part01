@@ -1,8 +1,11 @@
 package com.dezgre.mobile;
 
 import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
@@ -10,8 +13,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.inputmethod.InputMethodManager;
-import android.content.Context;
-import android.graphics.drawable.GradientDrawable;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -48,10 +49,15 @@ public final class MainActivity extends Activity {
     private String bearer;
     private String currentScope = "bot";
     private String currentTab = "home";
+    private String currentStoreId = "";
     private String currentStoreName = "Tienda";
     private String currentUserName = "Usuario";
     private String currentUserRole = "";
     private String currentUserAvatar = "";
+    private String pendingNotificationTab = "";
+    private String pendingNotificationResourceId = "";
+    private String pendingNotificationStoreId = "";
+    private String pendingNotificationEventId = "";
     private FrameLayout shell;
     private LinearLayout root;
     private LinearLayout body;
@@ -72,11 +78,22 @@ public final class MainActivity extends Activity {
         window.setNavigationBarColor(PANEL_DARK);
         api = new ApiClient();
         tokenStore = new SecureTokenStore(this);
+        captureNotificationIntent(getIntent());
         bearer = tokenStore.load();
         if (bearer == null) {
             showLogin(null);
         } else {
             validateSession();
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        captureNotificationIntent(intent);
+        if (bearer != null && !bearer.trim().isEmpty() && body != null) {
+            enterAuthenticatedRoute();
         }
     }
 
@@ -197,6 +214,8 @@ public final class MainActivity extends Activity {
             if (!avatar.isEmpty()) currentUserAvatar = avatar;
         }
         if (store != null) {
+            String id = store.optString("id", "").trim();
+            if (!id.isEmpty() && !"null".equalsIgnoreCase(id)) currentStoreId = id;
             String name = store.optString("name", "").trim();
             if (!name.isEmpty()) currentStoreName = name;
             String role = store.optString("role", "").trim();
@@ -210,6 +229,56 @@ public final class MainActivity extends Activity {
         if (userTopbarView != null) userTopbarView.setText(currentUserName);
     }
 
+    private void captureNotificationIntent(Intent intent) {
+        if (intent == null) return;
+        String tab = intent.getStringExtra(DezgreNotificationManager.EXTRA_ROUTE_TAB);
+        if (!"orders".equals(tab) && !"connections".equals(tab)) return;
+        pendingNotificationTab = tab;
+        pendingNotificationResourceId = cleanExtra(intent.getStringExtra(DezgreNotificationManager.EXTRA_RESOURCE_ID));
+        pendingNotificationStoreId = cleanExtra(intent.getStringExtra(DezgreNotificationManager.EXTRA_STORE_ID));
+        pendingNotificationEventId = cleanExtra(intent.getStringExtra(DezgreNotificationManager.EXTRA_EVENT_ID));
+    }
+
+    private String cleanExtra(String value) {
+        if (value == null) return "";
+        String clean = value.trim();
+        return "null".equalsIgnoreCase(clean) ? "" : clean;
+    }
+
+    private void enterAuthenticatedRoute() {
+        String tab = pendingNotificationTab;
+        String resourceId = pendingNotificationResourceId;
+        String targetStoreId = pendingNotificationStoreId;
+        clearPendingNotificationRoute();
+
+        if (tab.isEmpty()) {
+            showMain("home");
+            return;
+        }
+
+        if (!targetStoreId.isEmpty() && !currentStoreId.isEmpty() && !targetStoreId.equals(currentStoreId)) {
+            showMain("home");
+            android.widget.Toast.makeText(
+                    this,
+                    "Esta notificación pertenece a otra tienda. Cambia a esa tienda antes de abrir el recurso.",
+                    android.widget.Toast.LENGTH_LONG
+            ).show();
+            return;
+        }
+
+        showMain(tab);
+        if ("orders".equals(tab) && !resourceId.isEmpty()) {
+            loadOrderDetail(resourceId);
+        }
+    }
+
+    private void clearPendingNotificationRoute() {
+        pendingNotificationTab = "";
+        pendingNotificationResourceId = "";
+        pendingNotificationStoreId = "";
+        pendingNotificationEventId = "";
+    }
+
     private void validateSession() {
         setContentView(loadingScreen("Validando sesión segura…"));
         api.get("/me", bearer, new ApiClient.Callback() {
@@ -217,7 +286,7 @@ public final class MainActivity extends Activity {
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
                         applyIdentity(json);
-                        showMain("home");
+                        enterAuthenticatedRoute();
                     }
                 });
             }
