@@ -5,8 +5,8 @@ import org.json.JSONObject;
 import java.util.Locale;
 
 final class MobileNotificationEvent {
-    static final String NEW_WEB_ORDER = "NEW_WEB_ORDER";
-    static final String NEW_AI_ORDER = "NEW_AI_ORDER";
+    static final String WEB_ORDER_CREATED = "WEB_ORDER_CREATED";
+    static final String AI_ORDER_CREATED = "AI_ORDER_CREATED";
     static final String WHATSAPP_CONNECTION_DISCONNECTED = "WHATSAPP_CONNECTION_DISCONNECTED";
     static final String WHATSAPP_RECONNECT_STARTED = "WHATSAPP_RECONNECT_STARTED";
 
@@ -61,14 +61,14 @@ final class MobileNotificationEvent {
     }
 
     static boolean isSupported(String eventType) {
-        return NEW_WEB_ORDER.equals(eventType)
-                || NEW_AI_ORDER.equals(eventType)
+        return WEB_ORDER_CREATED.equals(eventType)
+                || AI_ORDER_CREATED.equals(eventType)
                 || WHATSAPP_CONNECTION_DISCONNECTED.equals(eventType)
                 || WHATSAPP_RECONNECT_STARTED.equals(eventType);
     }
 
     boolean isOrderEvent() {
-        return NEW_WEB_ORDER.equals(eventType) || NEW_AI_ORDER.equals(eventType);
+        return WEB_ORDER_CREATED.equals(eventType) || AI_ORDER_CREATED.equals(eventType);
     }
 
     String routeTab() {
@@ -77,8 +77,8 @@ final class MobileNotificationEvent {
 
     String resolvedTitle() {
         if (!title.isEmpty()) return title;
-        if (NEW_WEB_ORDER.equals(eventType)) return "Nueva venta web";
-        if (NEW_AI_ORDER.equals(eventType)) return "Nueva venta de NATI";
+        if (WEB_ORDER_CREATED.equals(eventType)) return "Nueva venta web";
+        if (AI_ORDER_CREATED.equals(eventType)) return "Nueva venta de NATI";
         if (WHATSAPP_CONNECTION_DISCONNECTED.equals(eventType)) return "WhatsApp desconectado";
         if (WHATSAPP_RECONNECT_STARTED.equals(eventType)) return "Reconexión de WhatsApp";
         return "DEZGRE";
