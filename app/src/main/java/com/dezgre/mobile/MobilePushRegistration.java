@@ -35,34 +35,27 @@ final class MobilePushRegistration {
         return payload;
     }
 
-    static JSONObject buildUnregisterPayload(Context context) {
-        JSONObject payload = new JSONObject();
-        try {
-            payload.put("platform", "android");
-            payload.put("deviceId", new SecurePushStore(context).getOrCreateDeviceId());
-        } catch (Exception ignored) {
-            return null;
-        }
-        return payload;
+    static String deviceId(Context context) {
+        return new SecurePushStore(context).getOrCreateDeviceId();
     }
 
-    static boolean needsRegistration(Context context) {
-        return new SecurePushStore(context).needsRegistration();
+    static boolean needsRegistration(Context context, String bearer) {
+        return new SecurePushStore(context).needsRegistration(bearer);
     }
 
-    static void markRegistered(Context context) {
-        new SecurePushStore(context).markRegistered();
+    static void markRegistered(Context context, String bearer) {
+        new SecurePushStore(context).markRegistered(bearer);
     }
 
-    static void invalidateRegistration(Context context) {
-        new SecurePushStore(context).invalidateRegistration();
+    static void invalidateRegistration(Context context, String bearer) {
+        new SecurePushStore(context).invalidateRegistration(bearer);
     }
 
-    static String statusLabel(Context context) {
+    static String statusLabel(Context context, String bearer) {
         SecurePushStore store = new SecurePushStore(context);
         String token = store.loadPushToken();
-        if (token == null || token.isEmpty()) return "Esperando proveedor push";
-        return store.needsRegistration() ? "Token protegido · registro V1 pendiente" : "Registrado";
+        if (token == null || token.isEmpty()) return "Esperando token FCM";
+        return store.needsRegistration(bearer) ? "FCM listo · registro V1 pendiente" : "FCM registrado";
     }
 
     private static String appVersion(Context context) {
