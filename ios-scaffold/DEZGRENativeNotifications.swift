@@ -4,17 +4,17 @@ import UIKit
 import UserNotifications
 
 // This file is intentionally transport-ready but not wired to an iOS target yet.
-// It contains no backend secret and no invented /v1 endpoint.
+// It contains no backend secret and uses only the certified API V1 contract.
 
 enum DEZGREEventType: String {
-    case newWebOrder = "NEW_WEB_ORDER"
-    case newAIOrder = "NEW_AI_ORDER"
+    case webOrderCreated = "WEB_ORDER_CREATED"
+    case aiOrderCreated = "AI_ORDER_CREATED"
     case whatsappDisconnected = "WHATSAPP_CONNECTION_DISCONNECTED"
     case whatsappReconnectStarted = "WHATSAPP_RECONNECT_STARTED"
 
     var route: DEZGRERouteKind {
         switch self {
-        case .newWebOrder, .newAIOrder:
+        case .webOrderCreated, .aiOrderCreated:
             return .orders
         case .whatsappDisconnected, .whatsappReconnectStarted:
             return .connections
@@ -91,8 +91,8 @@ struct DEZGREPushEvent {
 
     private static func defaultTitle(_ type: DEZGREEventType) -> String {
         switch type {
-        case .newWebOrder: return "Nueva venta web"
-        case .newAIOrder: return "Nueva venta de NATI"
+        case .webOrderCreated: return "Nueva venta web"
+        case .aiOrderCreated: return "Nueva venta de NATI"
         case .whatsappDisconnected: return "WhatsApp desconectado"
         case .whatsappReconnectStarted: return "Reconexión de WhatsApp"
         }
@@ -236,7 +236,6 @@ final class DEZGRENotificationCoordinator: NSObject, UNUserNotificationCenterDel
         }
     }
 
-    // Call this from AppDelegate application(_:didRegisterForRemoteNotificationsWithDeviceToken:).
     @discardableResult
     func acceptAPNSToken(_ deviceToken: Data) -> Bool {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
