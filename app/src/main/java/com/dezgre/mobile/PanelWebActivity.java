@@ -32,6 +32,7 @@ public final class PanelWebActivity extends Activity {
     private WebView webView;
     private ProgressBar progress;
     private ValueCallback<Uri[]> fileChooserCallback;
+    private boolean mainFrameCommitted = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,6 +54,8 @@ public final class PanelWebActivity extends Activity {
 
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(245, 245, 246));
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         root.addView(webView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -63,7 +66,7 @@ public final class PanelWebActivity extends Activity {
         progress.setProgress(5);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(3)
+                dp(2)
         );
         progressParams.gravity = android.view.Gravity.TOP;
         root.addView(progress, progressParams);
@@ -72,6 +75,8 @@ public final class PanelWebActivity extends Activity {
         configureWebView();
 
         if (savedInstanceState != null && webView.restoreState(savedInstanceState) != null) {
+            mainFrameCommitted = true;
+            progress.setVisibility(View.GONE);
             return;
         }
         webView.loadUrl(accessUrl);
@@ -95,6 +100,7 @@ public final class PanelWebActivity extends Activity {
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
         settings.setLoadsImagesAutomatically(true);
+        settings.setBlockNetworkImage(false);
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(false);
         settings.setSupportZoom(false);
@@ -105,12 +111,15 @@ public final class PanelWebActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setTextZoom(100);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        if (Build.VERSION.SDK_INT >= 23) settings.setOffscreenPreRaster(true);
         if (Build.VERSION.SDK_INT >= 21) {
             settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         }
         String userAgent = settings.getUserAgentString();
         if (userAgent == null) userAgent = "Android WebView";
-        settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.5");
+        if (!userAgent.contains("DEZGRE-Mobile/")) {
+            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.6");
+        }
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -126,14 +135,24 @@ public final class PanelWebActivity extends Activity {
 
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                mainFrameCommitted = false;
                 progress.setVisibility(View.VISIBLE);
                 progress.setProgress(8);
             }
 
             @Override
+            public void onPageCommitVisible(WebView view, String url) {
+                mainFrameCommitted = true;
+                progress.setVisibility(View.GONE);
+                applyNativePanelFixes(view);
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
+                mainFrameCommitted = true;
                 progress.setProgress(100);
                 progress.setVisibility(View.GONE);
+                applyNativePanelFixes(view);
                 CookieManager.getInstance().flush();
             }
 
@@ -151,7 +170,11 @@ public final class PanelWebActivity extends Activity {
             @Override
             public void onProgressChanged(WebView view, int newProgress) {
                 progress.setProgress(Math.max(5, newProgress));
-                progress.setVisibility(newProgress >= 100 ? View.GONE : View.VISIBLE);
+                if (mainFrameCommitted || newProgress >= 100) {
+                    progress.setVisibility(View.GONE);
+                } else {
+                    progress.setVisibility(View.VISIBLE);
+                }
             }
 
             @Override
@@ -193,6 +216,19 @@ public final class PanelWebActivity extends Activity {
                 download(url, userAgent, contentDisposition, mimeType);
             }
         });
+    }
+
+    private void applyNativePanelFixes(WebView view) {
+        if (view == null || Build.VERSION.SDK_INT < 19) return;
+        String javascript = "(function(){"
+                + "var id='dezgre-native-app-fixes-v016';"
+                + "if(!document.getElementById(id)){"
+                + "var s=document.createElement('style');s.id=id;"
+                + "s.textContent='@media(max-width:1023px){html,body,.panelShell{min-height:100%!important}.panelSidebar{position:fixed!important;top:0!important;right:auto!important;bottom:0!important;height:auto!important;min-height:100vh!important;min-height:100dvh!important;max-height:none!important;box-sizing:border-box!important;overscroll-behavior:contain!important;padding-bottom:max(18px,env(safe-area-inset-bottom))!important}}';"
+                + "(document.head||document.documentElement).appendChild(s);"
+                + "}"
+                + "})();";
+        view.evaluateJavascript(javascript, null);
     }
 
     private boolean handleNavigation(Uri uri) {
