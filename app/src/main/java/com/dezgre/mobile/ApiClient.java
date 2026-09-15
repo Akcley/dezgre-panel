@@ -105,18 +105,18 @@ public final class ApiClient {
                         if (detailedCallback != null) detailedCallback.onSuccess(status, json);
                         else if (callback != null) callback.onSuccess(json);
                     } else {
-                        String message = json.optString("error", "La API respondió con un error.");
+                        String message = json.optString("error", "No se pudo completar la operación.");
                         String code = json.optString("code", "HTTP_" + status);
                         ApiException error = new ApiException(status, code, message);
                         if (detailedCallback != null) detailedCallback.onError(error);
                         else if (callback != null) callback.onError(error);
                     }
                 } catch (JSONException e) {
-                    ApiException error = new ApiException(502, "INVALID_API_RESPONSE", "La API devolvió una respuesta no válida.");
+                    ApiException error = new ApiException(502, "INVALID_API_RESPONSE", "DEZGRE devolvió una respuesta no válida.");
                     if (detailedCallback != null) detailedCallback.onError(error);
                     else if (callback != null) callback.onError(error);
                 } catch (Exception e) {
-                    ApiException error = new ApiException(0, "NETWORK_ERROR", "No se pudo conectar con API DEZGRE V1.");
+                    ApiException error = new ApiException(0, "NETWORK_ERROR", "No se pudo conectar con DEZGRE.");
                     if (detailedCallback != null) detailedCallback.onError(error);
                     else if (callback != null) callback.onError(error);
                 } finally {
