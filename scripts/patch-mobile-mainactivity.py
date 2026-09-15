@@ -193,3 +193,42 @@ if changed:
     print("MainActivity generated source updated safely")
 else:
     print("MainActivity generated source already up to date")
+
+# Stable native-app identity for NEXT. Preserve the stock Android WebView UA and append
+# one invariant marker; never replace the browser UA wholesale.
+panel_path = Path("app/src/main/java/com/dezgre/mobile/PanelWebActivity.java")
+panel_source = panel_path.read_text(encoding="utf-8")
+old_ua = '''        String userAgent = settings.getUserAgentString();
+        if (userAgent == null) userAgent = "Android WebView";
+        if (!userAgent.contains("DEZGRE-Mobile/")) {
+            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.14");
+        }'''
+new_ua = '''        String userAgent = settings.getUserAgentString();
+        if (userAgent == null) userAgent = "Android WebView";
+        final String dezgreMobileMarker = "DEZGRE-Mobile/Android";
+        if (!userAgent.contains(dezgreMobileMarker)) {
+            settings.setUserAgentString(userAgent + " " + dezgreMobileMarker);
+        }'''
+if panel_source.count(new_ua) == 1:
+    print("Stable DEZGRE Mobile WebView UA marker already present")
+elif panel_source.count(old_ua) == 1:
+    panel_source = panel_source.replace(old_ua, new_ua, 1)
+    panel_path.write_text(panel_source, encoding="utf-8")
+    print("Added stable DEZGRE-Mobile/Android marker to stock WebView UA")
+else:
+    raise SystemExit("Unexpected PanelWebActivity UA state; refusing broad rewrite")
+
+# Android status-bar notification icon must be a white-on-transparent monochrome resource.
+# Keep the full-color official DEZGRE asset for launcher/adaptive icon only.
+notification_path = Path("app/src/main/java/com/dezgre/mobile/DezgreNotificationManager.java")
+notification_source = notification_path.read_text(encoding="utf-8")
+old_small_icon = "        builder.setSmallIcon(R.drawable.ic_launcher)"
+new_small_icon = "        builder.setSmallIcon(R.drawable.ic_notification_dezgre)"
+if new_small_icon in notification_source:
+    print("Official DEZGRE monochrome notification smallIcon already wired")
+elif notification_source.count(old_small_icon) == 1:
+    notification_source = notification_source.replace(old_small_icon, new_small_icon, 1)
+    notification_path.write_text(notification_source, encoding="utf-8")
+    print("Wired official DEZGRE monochrome notification smallIcon")
+else:
+    raise SystemExit("Unexpected notification smallIcon state; refusing broad rewrite")
