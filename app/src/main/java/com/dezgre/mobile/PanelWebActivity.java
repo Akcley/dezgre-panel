@@ -9,10 +9,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewParent;
 import android.view.Window;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
@@ -65,18 +63,6 @@ public final class PanelWebActivity extends Activity {
         webView.setNestedScrollingEnabled(true);
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
-        webView.setOnTouchListener((view, event) -> {
-            ViewParent parent = view.getParent();
-            if (parent != null) {
-                int action = event.getActionMasked();
-                if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE) {
-                    parent.requestDisallowInterceptTouchEvent(true);
-                } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                    parent.requestDisallowInterceptTouchEvent(false);
-                }
-            }
-            return false;
-        });
         if (Build.VERSION.SDK_INT >= 26) {
             webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
         }
@@ -144,7 +130,7 @@ public final class PanelWebActivity extends Activity {
         String userAgent = settings.getUserAgentString();
         if (userAgent == null) userAgent = "Android WebView";
         if (!userAgent.contains("DEZGRE-Mobile/")) {
-            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.12");
+            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.13");
         }
 
         webView.setWebViewClient(new WebViewClient() {
@@ -247,17 +233,18 @@ public final class PanelWebActivity extends Activity {
     private void applyNativePanelFixes(final WebView view) {
         if (view == null || Build.VERSION.SDK_INT < 19) return;
         String javascript = "(function(){"
-                + "var id='dezgre-native-app-shell-v0112';"
+                + "var id='dezgre-native-app-shell-v0113';"
                 + "var root=document.documentElement,body=document.body;"
                 + "if(!document.getElementById(id)){"
                 + "var s=document.createElement('style');s.id=id;"
-                + "s.textContent='html{scroll-behavior:auto!important}html,body,.panelShell,.panelContent,.panelRouteTransition{touch-action:pan-x pan-y!important}html,body{margin:0!important;background-color:var(--dezgre-app-bg,#f5f5f6)!important}body>div:first-child,#__next,.panelShell,.panelContent,.panelRouteTransition{background-color:var(--dezgre-app-bg,#f5f5f6)!important}.panelMobileTopbar{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}.panelRouteTransition{animation:none!important}.panelSidebar{will-change:transform}.panelDrawerBackdrop{will-change:opacity}';"
+                + "s.textContent='html{scroll-behavior:auto!important}html,body{margin:0!important;background-color:var(--dezgre-app-bg,#f5f5f6)!important}body>div:first-child,#__next,.panelShell,.panelContent,.panelRouteTransition{background-color:var(--dezgre-app-bg,#f5f5f6)!important}.panelMobileTopbar{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}.panelRouteTransition{animation:none!important}.panelSidebar{will-change:transform}.panelDrawerBackdrop{will-change:opacity}@media(max-width:1023px){html,body{width:100%!important;height:100%!important;min-height:0!important;overflow:hidden!important;overscroll-behavior:none!important;touch-action:auto!important}body>div:first-child,#__next{height:100%!important;min-height:0!important;overflow:hidden!important}.panelShell{display:flex!important;flex-direction:column!important;width:100%!important;height:100dvh!important;min-height:0!important;overflow:hidden!important;touch-action:auto!important}.panelMobileTopbar{position:relative!important;top:auto!important;flex:0 0 auto!important}.panelContent{position:relative!important;flex:1 1 auto!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior-y:contain!important;touch-action:pan-y!important;-webkit-overflow-scrolling:touch!important}.panelContent>*{touch-action:auto}.panelDrawerBackdrop{touch-action:none}.panelSidebar{touch-action:pan-y!important}}';"
                 + "(document.head||document.documentElement).appendChild(s);"
                 + "}"
                 + "function syncTheme(){var shell=document.querySelector('.panelShell');var dark=shell&&shell.getAttribute('data-panel-theme')==='dark';var c=dark?'#151516':'#f5f5f6';root.style.setProperty('--dezgre-app-bg',c);root.style.backgroundColor=c;if(body)body.style.backgroundColor=c;return c;}"
                 + "var c=syncTheme();"
                 + "var shell=document.querySelector('.panelShell');"
                 + "if(shell&&!shell.__dezgreThemeObserver){var mo=new MutationObserver(function(){syncTheme();});mo.observe(shell,{attributes:true,attributeFilter:['data-panel-theme']});shell.__dezgreThemeObserver=mo;}"
+                + "var content=document.querySelector('.panelContent');if(content){content.style.webkitOverflowScrolling='touch';}"
                 + "return c;"
                 + "})();";
         view.evaluateJavascript(javascript, value -> {
@@ -381,7 +368,6 @@ public final class PanelWebActivity extends Activity {
         }
         if (webView != null) {
             webView.stopLoading();
-            webView.setOnTouchListener(null);
             webView.setWebChromeClient(null);
             webView.setWebViewClient(null);
             webView.destroy();
