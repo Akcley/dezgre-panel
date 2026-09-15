@@ -232,3 +232,72 @@ elif notification_source.count(old_small_icon) == 1:
     print("Wired official DEZGRE monochrome notification smallIcon")
 else:
     raise SystemExit("Unexpected notification smallIcon state; refusing broad rewrite")
+
+# Production presentation: internal push diagnostics stay available to code, but no
+# protocol/provider/debug wording is rendered to the user from the native fallback UI.
+ui_path = Path("app/src/main/java/com/dezgre/mobile/MainActivity.java")
+ui_source = ui_path.read_text(encoding="utf-8")
+ui_replacements = {
+    '"Controla el permiso de Android y verifica el estado FCM de este teléfono."':
+        '"Controla los avisos de DEZGRE en este teléfono."',
+    '''        String fcmLabel = PushRegistrationCoordinator.isFirebaseConfigured(this)
+                ? MobilePushRegistration.statusLabel(this, bearer)
+                : "Firebase pendiente: falta google-services.json";
+        notifCopy.addView(gap(2));
+        notifCopy.addView(text("Push: " + fcmLabel, 11,
+                fcmLabel.startsWith("FCM registrado") ? SUCCESS : MUTED, false));''':
+    '''        String notificationLabel = PushRegistrationCoordinator.isFirebaseConfigured(this)
+                ? MobilePushRegistration.statusLabel(this, bearer)
+                : "Configuración pendiente";
+        notifCopy.addView(gap(2));
+        notifCopy.addView(text("Estado: " + notificationLabel, 11,
+                "Notificaciones activas".equals(notificationLabel) ? SUCCESS : MUTED, false));''',
+    '"La prueba local valida el canal nativo. El registro remoto se realiza automáticamente al validar la sesión."':
+        '"Puedes comprobar los avisos del teléfono o sincronizarlos manualmente cuando lo necesites."',
+    'button("Sincronizar FCM ahora", false)':
+        'button("Sincronizar notificaciones", false)',
+    'notificationStatus.setText("Sincronizando FCM con API V1…");':
+        'notificationStatus.setText("Sincronizando notificaciones…");',
+    '''notificationStatus.setText(success
+                                                ? "FCM registrado correctamente para la tienda actual."
+                                                : "FCM no pudo registrarse: " + code);''':
+    '''notificationStatus.setText(success
+                                                ? "Notificaciones sincronizadas correctamente."
+                                                : "No se pudieron sincronizar las notificaciones. Inténtalo nuevamente.");''',
+    '"No se pudo retirar este dispositivo de API V1 (" + code + "). Reintenta el cierre de sesión."':
+        '"No se pudo cerrar la sesión en este dispositivo. Inténtalo nuevamente."',
+    'TextView version = text("DEZGRE Mobile " + versionName + " · build " + versionCode, 10, MUTED, false);':
+        'TextView version = text("DEZGRE Mobile " + versionName, 10, MUTED, false);',
+    'showLogin("No se recibió el Bearer de tienda.");':
+        'showLogin("No se pudo iniciar la sesión de la tienda.");',
+    '"No se pudo abrir el panel web. Se activó el modo de respaldo."':
+        '"No se pudo abrir DEZGRE. Inténtalo nuevamente."',
+}
+ui_changed = False
+for old, new in ui_replacements.items():
+    if new in ui_source:
+        continue
+    if old not in ui_source:
+        raise SystemExit(f"Expected production UI text not found: {old[:80]}")
+    ui_source = ui_source.replace(old, new)
+    ui_changed = True
+
+for forbidden in (
+    "Sincronizar FCM ahora",
+    "Sincronizando FCM",
+    "FCM registrado correctamente",
+    "FCM no pudo registrarse",
+    "Firebase pendiente",
+    "Push: ",
+    "API V1 (",
+    " · build ",
+    "No se recibió el Bearer de tienda",
+):
+    if forbidden in ui_source:
+        raise SystemExit(f"Technical user-facing text remains in MainActivity: {forbidden}")
+
+if ui_changed:
+    ui_path.write_text(ui_source, encoding="utf-8")
+    print("Production-facing Android text sanitized")
+else:
+    print("Production-facing Android text already sanitized")
