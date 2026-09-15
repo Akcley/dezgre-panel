@@ -9,6 +9,7 @@ final class MobileNotificationEvent {
     static final String AI_ORDER_CREATED = "AI_ORDER_CREATED";
     static final String WHATSAPP_CONNECTION_DISCONNECTED = "WHATSAPP_CONNECTION_DISCONNECTED";
     static final String WHATSAPP_RECONNECT_STARTED = "WHATSAPP_RECONNECT_STARTED";
+    static final String NOTIFICATION_TEST = "NOTIFICATION_TEST";
 
     final String eventId;
     final String eventType;
@@ -64,7 +65,8 @@ final class MobileNotificationEvent {
         return WEB_ORDER_CREATED.equals(eventType)
                 || AI_ORDER_CREATED.equals(eventType)
                 || WHATSAPP_CONNECTION_DISCONNECTED.equals(eventType)
-                || WHATSAPP_RECONNECT_STARTED.equals(eventType);
+                || WHATSAPP_RECONNECT_STARTED.equals(eventType)
+                || NOTIFICATION_TEST.equals(eventType);
     }
 
     boolean isOrderEvent() {
@@ -72,16 +74,25 @@ final class MobileNotificationEvent {
     }
 
     String routeTab() {
+        if (NOTIFICATION_TEST.equals(eventType)) return "home";
         return isOrderEvent() ? "orders" : "connections";
     }
 
     String resolvedTitle() {
+        if (NOTIFICATION_TEST.equals(eventType)) return "Notificación de prueba";
         if (!title.isEmpty()) return title;
         if (WEB_ORDER_CREATED.equals(eventType)) return "Nueva venta web";
         if (AI_ORDER_CREATED.equals(eventType)) return "Nueva venta de NATI";
         if (WHATSAPP_CONNECTION_DISCONNECTED.equals(eventType)) return "WhatsApp desconectado";
         if (WHATSAPP_RECONNECT_STARTED.equals(eventType)) return "Reconexión de WhatsApp";
         return "DEZGRE";
+    }
+
+    String resolvedBody() {
+        if (NOTIFICATION_TEST.equals(eventType)) {
+            return "Las notificaciones de DEZGRE están funcionando correctamente.";
+        }
+        return body;
     }
 
     private static String first(JSONObject json, String... keys) {
