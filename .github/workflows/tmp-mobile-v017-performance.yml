@@ -21,76 +21,45 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import base64
 
           java_path = Path('app/src/main/java/com/dezgre/mobile/PanelWebActivity.java')
           source = java_path.read_text(encoding='utf-8')
-
-          old_scroll = '''        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-                  webView.setOverScrollMode(View.OVER_SCROLL_NEVER);'''.replace('                  ', '        ')
-          new_scroll = '''        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-          webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
-          webView.setVerticalScrollBarEnabled(false);
-          webView.setHorizontalScrollBarEnabled(false);'''.replace('          ', '        ')
-          if old_scroll not in source:
-              raise SystemExit('Expected WebView scroll block not found')
+          old_scroll = '        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);\n        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);'
+          new_scroll = old_scroll + '\n        webView.setVerticalScrollBarEnabled(false);\n        webView.setHorizontalScrollBarEnabled(false);'
+          if source.count(old_scroll) != 1:
+              raise SystemExit('Expected one WebView scroll block')
           source = source.replace(old_scroll, new_scroll, 1)
-
-          source = source.replace('settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.6");',
-                                  'settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.7");', 1)
-
+          if source.count('DEZGRE-Mobile/0.1.6') != 1:
+              raise SystemExit('Expected one v0.1.6 user agent')
+          source = source.replace('DEZGRE-Mobile/0.1.6', 'DEZGRE-Mobile/0.1.7', 1)
           source = source.replace('        if (Build.VERSION.SDK_INT >= 23) settings.setOffscreenPreRaster(true);\n', '', 1)
-
           start = source.find('    private void applyNativePanelFixes(WebView view) {')
           end = source.find('    private boolean handleNavigation(Uri uri) {', start)
           if start < 0 or end < 0:
               raise SystemExit('Native panel fix method markers not found')
-
-          method = r'''    private void applyNativePanelFixes(WebView view) {
-              if (view == null || Build.VERSION.SDK_INT < 19) return;
-              String javascript = "(function(){"
-                      + "var id='dezgre-native-app-fixes-v017';"
-                      + "if(!document.getElementById(id)){"
-                      + "var s=document.createElement('style');s.id=id;"
-                      + "s.textContent='html{min-height:100%!important;overscroll-behavior-y:none!important;scroll-behavior:auto!important}body{min-height:100vh!important;min-height:100dvh!important;margin:0!important;overscroll-behavior-y:none!important}.panelShell{min-height:100vh!important;min-height:100dvh!important}.panelShell[data-panel-theme=dark],.panelShell[data-panel-theme=dark] .panelContent{background:#151516!important}.panelRouteTransition{animation:dezgreMobileRouteIn .18s cubic-bezier(.2,.72,.3,1)!important;will-change:opacity,transform}.panelMobileTopbar{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.natiVisualBubble{animation:dezgreMobileNatiFloat 4.8s ease-in-out infinite!important;will-change:transform!important;transform:translateZ(0);backface-visibility:hidden;box-shadow:0 8px 22px rgba(0,0,0,.16)!important}.natiVisualPanel{animation:dezgreMobileNatiIn .18s cubic-bezier(.2,.8,.2,1)!important;will-change:opacity,transform!important;transform:translateZ(0);backdrop-filter:none!important;-webkit-backdrop-filter:none!important;box-shadow:0 14px 34px rgba(0,0,0,.16)!important}[class*=nati i],[class*=nati i] *{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}.dezgre-mobile-paused .natiVisualBubble{animation-play-state:paused!important}@keyframes dezgreMobileRouteIn{from{opacity:.72;transform:translate3d(0,5px,0)}to{opacity:1;transform:translate3d(0,0,0)}}@keyframes dezgreMobileNatiFloat{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(0,-3px,0)}}@keyframes dezgreMobileNatiIn{from{opacity:0;transform:translate3d(0,8px,0) scale(.99)}to{opacity:1;transform:translate3d(0,0,0) scale(1)}}@media(max-width:1023px){.panelSidebar{position:fixed!important;top:0!important;right:auto!important;bottom:0!important;height:auto!important;min-height:100vh!important;min-height:100dvh!important;max-height:none!important;box-sizing:border-box!important;overscroll-behavior:contain!important;padding-bottom:max(18px,env(safe-area-inset-bottom))!important;transition:transform .22s cubic-bezier(.2,.8,.2,1)!important}.panelContent{min-height:calc(100dvh - 58px)!important}.panelSidebar nav a,.panelShell button{touch-action:manipulation}.panelSidebar nav a:active,.panelShell button:active{transform:scale(.985)!important}}';"
-                      + "(document.head||document.documentElement).appendChild(s);"
-                      + "}"
-                      + "var root=document.documentElement,body=document.body,shell=document.querySelector('.panelShell');"
-                      + "function syncTheme(){shell=document.querySelector('.panelShell');var dark=shell&&shell.getAttribute('data-panel-theme')==='dark';var c=dark?'#151516':'#f5f5f6';root.style.backgroundColor=c;if(body)body.style.backgroundColor=c;if(shell)shell.style.minHeight='100dvh';}"
-                      + "syncTheme();"
-                      + "if(shell&&!shell.__dezgreThemeObserver){var mo=new MutationObserver(syncTheme);mo.observe(shell,{attributes:true,attributeFilter:['data-panel-theme']});shell.__dezgreThemeObserver=mo;}"
-                      + "if(!document.__dezgreVisibilityHook){document.__dezgreVisibilityHook=true;document.addEventListener('visibilitychange',function(){root.classList.toggle('dezgre-mobile-paused',document.hidden);});}"
-                      + "})();";
-              view.evaluateJavascript(javascript, null);
-          }
-
-'''
+          method = base64.b64decode('ICAgIHByaXZhdGUgdm9pZCBhcHBseU5hdGl2ZVBhbmVsRml4ZXMoV2ViVmlldyB2aWV3KSB7CiAgICAgICAgaWYgKHZpZXcgPT0gbnVsbCB8fCBCdWlsZC5WRVJTSU9OLlNES19JTlQgPCAxOSkgcmV0dXJuOwogICAgICAgIFN0cmluZyBqYXZhc2NyaXB0ID0gIihmdW5jdGlvbigpewogICAgICAgICAgICAgICAgKyAidmFyIGlkPSdkZXpncmUtbmF0aXZlLWFwcC1maXhlcy12MDE3JzsiCiAgICAgICAgICAgICAgICArICJpZighZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoaWQpKXsiCiAgICAgICAgICAgICAgICArICJ2YXIgcz1kb2N1bWVudC5jcmVhdGVFbGVtZW50KCdzdHlsZScpO3MuaWQ9aWQ7IgogICAgICAgICAgICAgICAgKyAicy50ZXh0Q29udGVudD0naHRtbHttaW4taGVpZ2h0OjEwMCUhaW1wb3J0YW50O292ZXJzY3JvbGwtYmVoYXZpb3IteTpub25lIWltcG9ydGFudDtzY3JvbGwtYmVoYXZpb3I6YXV0byFpbXBvcnRhbnR9Ym9keXttaW4taGVpZ2h0OjEwMHZoIWltcG9ydGFudDttaW4taGVpZ2h0OjEwMGR2aCFpbXBvcnRhbnQ7bWFyZ2luOjAhaW1wb3J0YW50O292ZXJzY3JvbGwtYmVoYXZpb3IteTpub25lIWltcG9ydGFudH0ucGFuZWxTaGVsbHttaW4taGVpZ2h0OjEwMHZoIWltcG9ydGFudDttaW4taGVpZ2h0OjEwMGR2aCFpbXBvcnRhbnR9LnBhbmVsU2hlbGxbZGF0YS1wYW5lbC10aGVtZT1kYXJrXSwucGFuZWxTaGVsbFtkYXRhLXBhbmVsLXRoZW1lPWRhcmtdIC5wYW5lbENvbnRlbnR7YmFja2dyb3VuZDojMTUxNTE2IWltcG9ydGFudH0ucGFuZWxSb3V0ZVRyYW5zaXRpb257YW5pbWF0aW9uOmRlemdyZU1vYmlsZVJvdXRlSW4gLjE4cyBjdWJpYy1iZXppZXIoLjIsLjcyLC4zLDEpIWltcG9ydGFudDt3aWxsLWNoYW5nZTpvcGFjaXR5LHRyYW5zZm9ybX0ucGFuZWxNb2JpbGVUb3BiYXJ7YmFja2Ryb3AtZmlsdGVyOm5vbmUhaW1wb3J0YW50Oy13ZWJraXQtYmFja2Ryb3AtZmlsdGVyOm5vbmUhaW1wb3J0YW50fS5uYXRpVmlzdWFsQnViYmxle2FuaW1hdGlvbjpkZXpncmVNb2JpbGVOYXRpRmxvYXQgNC44cyBlYXNlLWluLW91dCBpbmZpbml0ZS FpbXBvcnRhbnQ7d2lsbC1jaGFuZ2U6dHJhbnNmb3JtIWltcG9ydGFudDt0cmFuc2Zvcm06dHJhbnNsYXRlWigwKTtiYWNrZmFjZS12aXNpYmlsaXR5OmhpZGRlbjtib3gtc2hhZG93OjAgOHB4IDIycHggcmdiYSgwLDAsMCwuMTYpIWltcG9ydGFudH0ubmF0aVZpc3VhbFBhbmVse2FuaW1hdGlvbjpkZXpncmVNb2JpbGVOYXRpSW4gLjE4cyBjdWJpYy1iZXppZXIoLjIsLjgsLjIsMSkhaW1wb3J0YW50O3dpbGwtY2hhbmdlOm9wYWNpdHksdHJhbnNmb3JtIWltcG9ydGFudDt0cmFuc2Zvcm06dHJhbnNsYXRlWigwKTtiYWNrZHJvcC1maWx0ZXI6bm9uZSFpbXBvcnRhbnQ7LXdlYmtpdC1iYWNrZHJvcC1maWx0ZXI6bm9uZSFpbXBvcnRhbnQ7Ym94LXNoYWRvdzowIDE0cHggMzRweCByZ2JhKDAsMCwwLC4xNikhbXBvcnRhbnR9W2NsYXNzKj1uYXRpIGldLFtjbGFzcyo9bmF0aSBpXSAqe2JhY2tkcm9wLWZpbHRlcjpub25lIWltcG9ydGFudDstV2Via2l0LWJhY2tkcm9wLWZpbHRlcjpub25lIWltcG9ydGFudH0uZGV6Z3JlLW1vYmlsZS1wYXVzZWQgLm5hdGlWaXN1YWxCdWJibGV7YW5pbWF0aW9uLXBsYXktc3RhdGU6cGF1c2VkIWltcG9ydGFudH1Aa2V5ZnJhbWVzIGRlemdyZU1vYmlsZVJvdXRlSW57ZnJvbXthbHBoYTouNzI7dHJhbnNmb3JtOnRyYW5zbGF0ZTNkKDAsNXB4LDApfXRve29wYWNpdHk6MTt0cmFuc2Zvcm06dHJhbnNsYXRlM2QoMCwwLDApfX1Aa2V5ZnJhbWVzIGRlemdyZU1vYmlsZU5hdGlGbG9hdHswJSwxMDAl e3RyYW5zZm9ybTp0cmFuc2xhdGUzZCgwLDAsMCl9NTAl e3RyYW5zZm9ybTp0cmFuc2xhdGUzZCgwLC0zcHgsMCl9fUB rZXlmcmFtZXMgZGV6Z3JlTW9iaWxlTmF0aUlu e2Zyb217b3BhY2l0eTowO3RyYW5zZm9ybTp0cmFuc2xhdGUzZCgwLDhweCwwKSBzY2FsZSguOTkpfXRve29wYWNpdHk6MTt0cmFuc2Zvcm06dHJhbnNsYXRlM2QoMCwwLDApIHNjYWxlKDEpfX1AbWVkaWEobWF4LXdpZHRoOjEwMjNweCl7LnBhbmVsU2lkZWJhcntwb3NpdGlvbjpmaXhlZCFpbXBvcnRhbnQ7dG9wOjAhaW1wb3J0YW50O3JpZ2h0OmF1dG8haW1wb3J0YW50O2JvdHRvbTowIWltcG9ydGFudDtoZWlnaHQ6YXV0byFpbXBvcnRhbnQ7bWluLWhlaWdodDoxMDB2aCFpbXBvcnRhbnQ7bWluLWhlaWdodDoxMDBkdmghaW1wb3J0YW50O21heC1oZWlnaHQ6bm9uZSFpbXBvcnRhbnQ7Ym94LXNpemluZzpib3JkZXItYm94IWltcG9ydGFudDtvdmVyc2Nyb2xsLWJlaGF2aW9yOmNvbnRhaW4haW1wb3J0YW50O3BhZGRpbmctYm90dG9tOm1heCgxOHB4LGVudihzYWZlLWFyZWEtaW5zZXQtYm90dG9tKSkhaW1wb3J0YW50O3RyYW5zaXRpb246dHJhbnNmb3JtIC4yMnMgY3ViaWMtYmV6aWVyKC4yLC44LC4yLDEpIWltcG9ydGFudH0ucGFuZWxDb250ZW50e21pbi1oZWlnaHQ6Y2FsYygxMDBkdmggLSA1OHB4KSFpbXBvcnRhbnR9LnBhbmVsU2lkZWJhciBuYXYgYSwucGFuZWxTaGVsbCBidXR0b257dG91Y2gtYWN0aW9uOm1hbmlwdWxhdGlvbn0ucGFuZWxTaWRlYmFyIG5hdiBhOmFjdGl2ZSwucGFuZWxTaGVsbCBidXR0b246YWN0aXZle3RyYW5zZm9ybTpzY2FsZSguOTg1KSFpbXBvcnRhbnR9fSc7IgogICAgICAgICAgICAgICAgKyAiKGRvY3VtZW50LmhlYWR8fGRvY3VtZW50LmRvY3VtZW50RWxlbWVudCkuYXBwZW5kQ2hpbGQocyk7IgogICAgICAgICAgICAgICAgKyAifSIKICAgICAgICAgICAgICAgICsgInZhciByb290PWRvY3VtZW50LmRvY3VtZW50RWxlbWVudCxib2R5PWRvY3VtZW50LmJvZHksc2hlbGw9ZG9jdW1lbnQucXVlcnlTZWxlY3RvcignLnBhbmVsU2hlbGwnKTsiCiAgICAgICAgICAgICAgICArICJmdW5jdGlvbiBzeW5jVGhlbWUoKXtzaGVsbD1kb2N1bWVudC5xdWVyeVNlbGVjdG9yKCcucGFuZWxTaGVsbCcpO3ZhciBkYXJrPXNoZWxsJiZzaGVsbC5nZXRBdHRyaWJ1dGUoJ2RhdGEtcGFuZWwtdGhlbWUnKT09PSdkYXJrJzt2YXIgYz1kYXJrPycjMTUxNTE2JzonI2Y1ZjVmNic7cm9vdC5zdHlsZS5iYWNrZ3JvdW5kQ29sb3I9YztpZihib2R5KWJvZHkuc3R5bGUuYmFja2dyb3VuZENvbG9yPWM7aWYoc2hlbGwpc2hlbGwuc3R5bGUubWluSGVpZ2h0PScxMDBkdmgnO30iCiAgICAgICAgICAgICAgICArICJzeW5jVGhlbWUoKTsiCiAgICAgICAgICAgICAgICArICJpZihzaGVsbCYmIXNoZWxsLl9fZGV6Z3JlVGhlbWVPYnNlcnZlcil7dmFyIG1vPW5ldyBNdXRhdGlvbk9ic2VydmVyKHN5bmNUaGVtZSk7bW8ub2JzZXJ2ZShzaGVsbCx7YXR0cmlidXRlczp0cnVlLGF0dHJpYnV0ZUZpbHRlcjpbJ2RhdGEtcGFuZWwtdGhlbWUnXX0pO3NoZWxsLl9fZGV6Z3JlVGhlbWVPYnNlcnZlcj1tbzt9IgogICAgICAgICAgICAgICAgKyAiaWYoIWRvY3VtZW50Ll9fZGV6Z3JlVmlzaWJpbGl0eUhvb2spe2RvY3VtZW50Ll9fZGV6Z3JlVmlzaWJpbGl0eUhvb2s9dHJ1ZTtkb2N1bWVudC5hZGRFdmVudExpc3RlbmVyKCd2aXNpYmlsaXR5Y2hhbmdlJyxmdW5jdGlvbigpe3Jvb3QuY2xhc3NMaXN0LnRvZ2dsZSgnZGV6Z3JlLW1vYmlsZS1wYXVzZWQnLGRvY3VtZW50LmhpZGRlbik7fSk7fSIKICAgICAgICAgICAgICAgICsgIn0pKCk7IjsKICAgICAgICB2aWV3LmV2YWx1YXRlSmF2YXNjcmlwdChqYXZhc2NyaXB0LCBudWxsKTsKICAgIH0KCg==').decode('utf-8')
           source = source[:start] + method + source[end:]
           java_path.write_text(source, encoding='utf-8')
 
           gradle_path = Path('app/build.gradle')
           gradle = gradle_path.read_text(encoding='utf-8')
-          old_gradle = "def buildVersionName = '0.1.6'"
-          new_gradle = "def buildVersionName = System.getenv('DEZGRE_VERSION_NAME') ?: '0.1.7'"
-          if gradle.count(old_gradle) != 1:
-              raise SystemExit('Expected one mobile 0.1.6 version declaration')
-          gradle_path.write_text(gradle.replace(old_gradle, new_gradle, 1), encoding='utf-8')
+          old = "def buildVersionName = '0.1.6'"
+          new = "def buildVersionName = System.getenv('DEZGRE_VERSION_NAME') ?: '0.1.7'"
+          if gradle.count(old) != 1:
+              raise SystemExit('Expected one v0.1.6 Gradle declaration')
+          gradle_path.write_text(gradle.replace(old, new, 1), encoding='utf-8')
 
-          workflow_path = Path('.github/workflows/build-dezgre-mobile-apk.yml')
-          workflow = workflow_path.read_text(encoding='utf-8')
+          build_path = Path('.github/workflows/build-dezgre-mobile-apk.yml')
+          workflow = build_path.read_text(encoding='utf-8')
           if 'DEZGRE-Mobile-v0.1.4' not in workflow:
-              raise SystemExit('Expected old artifact label not found')
-          workflow = workflow.replace('0.1.4', '0.1.7')
-          workflow_path.write_text(workflow, encoding='utf-8')
-
-          print('Applied app-only v0.1.7 performance, viewport and motion patch')
+              raise SystemExit('Expected v0.1.4 artifact naming')
+          build_path.write_text(workflow.replace('0.1.4', '0.1.7'), encoding='utf-8')
           PY
-
           grep -q 'DEZGRE-Mobile/0.1.7' app/src/main/java/com/dezgre/mobile/PanelWebActivity.java
           grep -q 'dezgre-native-app-fixes-v017' app/src/main/java/com/dezgre/mobile/PanelWebActivity.java
-          grep -q "DEZGRE-Mobile-v0.1.7" .github/workflows/build-dezgre-mobile-apk.yml
-          grep -q "'0.1.7'" app/build.gradle
-
-      - name: Commit production mobile patch and remove temporary workflow
+          grep -q 'DEZGRE-Mobile-v0.1.7' .github/workflows/build-dezgre-mobile-apk.yml
+      - name: Commit app-only patch and remove temporary workflow
         shell: bash
         run: |
           set -euo pipefail
