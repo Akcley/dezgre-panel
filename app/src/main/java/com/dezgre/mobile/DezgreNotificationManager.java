@@ -19,7 +19,12 @@ import org.json.JSONObject;
 
 final class DezgreNotificationManager {
     static final int REQUEST_NOTIFICATIONS = 4107;
-    static final String EXTRA_DEEP_LINK = "dezgre_deep_link";
+    static final String EXTRA_ROUTE_TAB = "dezgre_notification_route_tab";
+    static final String EXTRA_RESOURCE_ID = "dezgre_notification_resource_id";
+    static final String EXTRA_EVENT_ID = "dezgre_notification_event_id";
+    static final String EXTRA_EVENT_TYPE = "dezgre_notification_event_type";
+    static final String EXTRA_STORE_ID = "dezgre_notification_store_id";
+    private static final String EXTRA_DEEP_LINK = "dezgre_deep_link";
     private static final String GROUP_ID = "dezgre_events";
     private static final long[] DEFAULT_VIBRATION = new long[]{0, 180, 90, 180};
 
@@ -52,20 +57,30 @@ final class DezgreNotificationManager {
         return new NotificationConfigStore(context).applyRemote(storeId, configs);
     }
 
+    /**
+     * Entry point for the certified push transport (FCM now, APNs equivalent on iOS).
+     * This method never polls and never reaches private web endpoints.
+     */
     static boolean showPayload(Context context, JSONObject payload) {
-        if (payload == null) return false;
-        String storeId = first(payload, "store_id", "storeId");
-        String eventKey = first(payload, "event_key", "eventKey");
-        if (storeId.isEmpty() || eventKey.isEmpty()) return false;
-        String title = first(payload, "title");
-        String body = first(payload, "body", "message");
-        String deepLink = first(payload, "deep_link", "deepLink");
-        String notificationId = first(payload, "notification_id", "notificationId");
-        return showEvent(context, storeId, eventKey,
-                title.isEmpty() ? "DEZGRE" : title,
-                body,
-                deepLink,
-                notificationId);
+        MobileNotificationEvent event = MobileNotificationEvent.fromJson(payload);
+        if (event == null) return false;
+        if (!new NotificationEventDeduplicator(context).markIfNew(event.eventId)) return false;
+        return showEvent(context, event);
+    }
+
+    private static boolean showEvent(Context context, MobileNotificationEvent event) {
+        return showEvent(
+                context,
+                event.storeId,
+                event.eventType,
+                event.resolvedTitle(),
+                event.body,
+                "",
+                event.eventId,
+                event.routeTab(),
+                event.resourceId,
+                event.eventType
+        );
     }
 
     static boolean showEvent(
@@ -76,6 +91,32 @@ final class DezgreNotificationManager {
             String body,
             String deepLink,
             String notificationId
+    ) {
+        return showEvent(
+                context,
+                storeId,
+                eventKey,
+                title,
+                body,
+                deepLink,
+                notificationId,
+                "",
+                "",
+                eventKey
+        );
+    }
+
+    private static boolean showEvent(
+            Context context,
+            String storeId,
+            String eventKey,
+            String title,
+            String body,
+            String deepLink,
+            String notificationId,
+            String routeTab,
+            String resourceId,
+            String eventType
     ) {
         if (!hasPermission(context)) return false;
         NotificationConfig config = new NotificationConfigStore(context).get(storeId, eventKey);
@@ -89,6 +130,12 @@ final class DezgreNotificationManager {
         Intent open = new Intent(context, MainActivity.class);
         open.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         if (deepLink != null && !deepLink.isEmpty()) open.putExtra(EXTRA_DEEP_LINK, deepLink);
+        if (routeTab != null && !routeTab.isEmpty()) open.putExtra(EXTRA_ROUTE_TAB, routeTab);
+        if (resourceId != null && !resourceId.isEmpty()) open.putExtra(EXTRA_RESOURCE_ID, resourceId);
+        if (notificationId != null && !notificationId.isEmpty()) open.putExtra(EXTRA_EVENT_ID, notificationId);
+        if (eventType != null && !eventType.isEmpty()) open.putExtra(EXTRA_EVENT_TYPE, eventType);
+        if (storeId != null && !storeId.isEmpty()) open.putExtra(EXTRA_STORE_ID, storeId);
+
         int requestCode = Math.abs((storeId + ":" + eventKey + ":" + notificationId).hashCode());
         PendingIntent pending = PendingIntent.getActivity(
                 context,
@@ -107,7 +154,7 @@ final class DezgreNotificationManager {
                 .setContentIntent(pending)
                 .setAutoCancel(true)
                 .setGroup(GROUP_ID)
-                .setCategory(Notification.CATEGORY_MESSAGE)
+                .setCategory(isConnectionEvent(eventType) ? Notification.CATEGORY_STATUS : Notification.CATEGORY_MESSAGE)
                 .setPriority(Notification.PRIORITY_HIGH)
                 .setVisibility(Notification.VISIBILITY_PRIVATE);
 
@@ -151,7 +198,7 @@ final class DezgreNotificationManager {
                 storeId,
                 testEvent,
                 "DEZGRE · Prueba",
-                "Notificación con sonido y vibración habilitados.",
+                "Notificación nativa con sonido y vibración habilitados.",
                 "",
                 "local-test-" + System.currentTimeMillis()
         );
@@ -208,17 +255,18 @@ final class DezgreNotificationManager {
     }
 
     private static String channelName(String eventKey) {
+        if (MobileNotificationEvent.NEW_WEB_ORDER.equals(eventKey)) return "Ventas web";
+        if (MobileNotificationEvent.NEW_AI_ORDER.equals(eventKey)) return "Ventas de NATI";
+        if (MobileNotificationEvent.WHATSAPP_CONNECTION_DISCONNECTED.equals(eventKey)) return "WhatsApp desconectado";
+        if (MobileNotificationEvent.WHATSAPP_RECONNECT_STARTED.equals(eventKey)) return "Reconexión de WhatsApp";
         if ("whatsapp_message".equals(eventKey)) return "Nuevo mensaje de WhatsApp";
         if ("support_chat".equals(eventKey)) return "Soporte / Chat Web";
         if ("mobile_test".equals(eventKey)) return "Prueba de notificaciones";
         return "DEZGRE · " + eventKey.replace('_', ' ');
     }
 
-    private static String first(JSONObject json, String... keys) {
-        for (String key : keys) {
-            String value = json.optString(key, "");
-            if (!value.isEmpty() && !"null".equalsIgnoreCase(value)) return value;
-        }
-        return "";
+    private static boolean isConnectionEvent(String eventType) {
+        return MobileNotificationEvent.WHATSAPP_CONNECTION_DISCONNECTED.equals(eventType)
+                || MobileNotificationEvent.WHATSAPP_RECONNECT_STARTED.equals(eventType);
     }
 }
