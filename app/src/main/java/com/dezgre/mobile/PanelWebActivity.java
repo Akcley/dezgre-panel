@@ -9,6 +9,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -33,6 +35,11 @@ public final class PanelWebActivity extends Activity {
     private ProgressBar progress;
     private ValueCallback<Uri[]> fileChooserCallback;
     private boolean mainFrameCommitted = false;
+    private boolean motionSuppressed = false;
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private final Runnable resumeMotionRunnable = new Runnable() {
+        @Override public void run() { setWebMotionSuppressed(false); }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,9 +61,26 @@ public final class PanelWebActivity extends Activity {
 
         webView = new WebView(this);
         webView.setBackgroundColor(Color.rgb(245, 245, 246));
-        webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        webView.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
         webView.setVerticalScrollBarEnabled(false);
         webView.setHorizontalScrollBarEnabled(false);
+        webView.setScrollBarStyle(View.SCROLLBARS_INSIDE_OVERLAY);
+        if (Build.VERSION.SDK_INT >= 21) webView.setNestedScrollingEnabled(true);
+        if (Build.VERSION.SDK_INT >= 26) {
+            webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
+        }
+        if (Build.VERSION.SDK_INT >= 23) {
+            webView.setOnScrollChangeListener(new View.OnScrollChangeListener() {
+                @Override
+                public void onScrollChange(View v, int scrollX, int scrollY, int oldScrollX, int oldScrollY) {
+                    if (scrollY == oldScrollY && scrollX == oldScrollX) return;
+                    setWebMotionSuppressed(true);
+                    uiHandler.removeCallbacks(resumeMotionRunnable);
+                    uiHandler.postDelayed(resumeMotionRunnable, 140L);
+                }
+            });
+        }
         root.addView(webView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -118,7 +142,7 @@ public final class PanelWebActivity extends Activity {
         String userAgent = settings.getUserAgentString();
         if (userAgent == null) userAgent = "Android WebView";
         if (!userAgent.contains("DEZGRE-Mobile/")) {
-            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.8");
+            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.9");
         }
 
         webView.setWebViewClient(new WebViewClient() {
@@ -221,18 +245,27 @@ public final class PanelWebActivity extends Activity {
     private void applyNativePanelFixes(WebView view) {
         if (view == null || Build.VERSION.SDK_INT < 19) return;
         String javascript = "(function(){"
-                + "var id='dezgre-native-app-shell-v018';"
+                + "var id='dezgre-native-app-shell-v019';"
                 + "if(!document.getElementById(id)){"
                 + "var s=document.createElement('style');s.id=id;"
-                + "s.textContent='html,body{min-height:100%!important}body{min-height:100vh!important;min-height:100dvh!important;margin:0!important}.panelShell{min-height:100vh!important;min-height:100dvh!important}';"
+                + "s.textContent='html,body{min-height:100%!important}body{min-height:100vh!important;min-height:100dvh!important;margin:0!important}.panelShell{min-height:100vh!important;min-height:100dvh!important}html.dezgre-app-motion-suppressed *,html.dezgre-app-motion-suppressed *::before,html.dezgre-app-motion-suppressed *::after,html.dezgre-app-typing *,html.dezgre-app-typing *::before,html.dezgre-app-typing *::after{animation-play-state:paused!important}';"
                 + "(document.head||document.documentElement).appendChild(s);"
                 + "}"
                 + "var root=document.documentElement,body=document.body,shell=document.querySelector('.panelShell');"
                 + "function syncTheme(){shell=document.querySelector('.panelShell');var dark=shell&&shell.getAttribute('data-panel-theme')==='dark';var c=dark?'#151516':'#f5f5f6';root.style.backgroundColor=c;if(body)body.style.backgroundColor=c;}"
                 + "syncTheme();"
                 + "if(shell&&!shell.__dezgreThemeObserver){var mo=new MutationObserver(syncTheme);mo.observe(shell,{attributes:true,attributeFilter:['data-panel-theme']});shell.__dezgreThemeObserver=mo;}"
+                + "if(!document.__dezgreTypingPerf){document.__dezgreTypingPerf=true;var t=0;document.addEventListener('input',function(){root.classList.add('dezgre-app-typing');clearTimeout(t);t=setTimeout(function(){root.classList.remove('dezgre-app-typing');},170);},true);}"
                 + "})();";
         view.evaluateJavascript(javascript, null);
+    }
+
+    private void setWebMotionSuppressed(boolean suppressed) {
+        if (webView == null || Build.VERSION.SDK_INT < 19) return;
+        if (motionSuppressed == suppressed) return;
+        motionSuppressed = suppressed;
+        String op = suppressed ? "add" : "remove";
+        webView.evaluateJavascript("document.documentElement&&document.documentElement.classList." + op + "('dezgre-app-motion-suppressed');", null);
     }
 
     private boolean handleNavigation(Uri uri) {
@@ -310,6 +343,28 @@ public final class PanelWebActivity extends Activity {
     }
 
     @Override
+    protected void onPause() {
+        uiHandler.removeCallbacks(resumeMotionRunnable);
+        if (webView != null) {
+            webView.onPause();
+            webView.pauseTimers();
+        }
+        super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (webView != null) {
+            webView.resumeTimers();
+            webView.onResume();
+            uiHandler.postDelayed(new Runnable() {
+                @Override public void run() { setWebMotionSuppressed(false); }
+            }, 80L);
+        }
+    }
+
+    @Override
     public void onBackPressed() {
         if (webView != null && webView.canGoBack()) {
             webView.goBack();
@@ -320,6 +375,7 @@ public final class PanelWebActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        uiHandler.removeCallbacksAndMessages(null);
         if (fileChooserCallback != null) {
             fileChooserCallback.onReceiveValue(null);
             fileChooserCallback = null;
