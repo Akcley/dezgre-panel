@@ -22,40 +22,43 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
-import android.widget.ProgressBar;
 import android.widget.Toast;
 
 public final class PanelWebActivity extends Activity {
     public static final String EXTRA_ACCESS_URL = "dezgre_panel_access_url";
     private static final int FILE_CHOOSER_REQUEST = 6201;
+    private static final int PRELOAD_BG = Color.rgb(247, 247, 248);
 
     private FrameLayout root;
     private WebView webView;
-    private ProgressBar progress;
+    private DezgrePreloadView preload;
     private ValueCallback<Uri[]> fileChooserCallback;
     private boolean mainFrameCommitted = false;
     private boolean nativePanelFixesApplied = false;
+    private boolean preloadDismissed = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         Window window = getWindow();
-        window.setStatusBarColor(Color.rgb(13, 13, 15));
-        window.setNavigationBarColor(Color.rgb(13, 13, 15));
+        window.setStatusBarColor(PRELOAD_BG);
+        window.setNavigationBarColor(PRELOAD_BG);
+        setLightSystemBars(true);
 
         String accessUrl = getIntent().getStringExtra(EXTRA_ACCESS_URL);
         if (accessUrl == null || !isHttpsUrl(accessUrl)) {
-            Toast.makeText(this, "No se recibió un acceso seguro al panel.", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "No se pudo abrir DEZGRE de forma segura.", Toast.LENGTH_LONG).show();
             finish();
             return;
         }
 
         root = new FrameLayout(this);
-        root.setBackgroundColor(Color.rgb(13, 13, 15));
+        root.setBackgroundColor(PRELOAD_BG);
 
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(13, 13, 15));
+        webView.setBackgroundColor(PRELOAD_BG);
+        webView.setAlpha(0f);
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.setVerticalScrollBarEnabled(false);
@@ -72,15 +75,11 @@ public final class PanelWebActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT
         ));
 
-        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progress.setMax(100);
-        progress.setProgress(5);
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
+        preload = new DezgrePreloadView(this);
+        root.addView(preload, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(2)
-        );
-        progressParams.gravity = android.view.Gravity.TOP;
-        root.addView(progress, progressParams);
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
 
         setContentView(root);
         configureWebView();
@@ -88,7 +87,8 @@ public final class PanelWebActivity extends Activity {
         if (savedInstanceState != null && webView.restoreState(savedInstanceState) != null) {
             mainFrameCommitted = true;
             nativePanelFixesApplied = true;
-            progress.setVisibility(View.GONE);
+            webView.setAlpha(1f);
+            dismissPreload(false);
             return;
         }
         webView.loadUrl(accessUrl);
@@ -123,16 +123,14 @@ public final class PanelWebActivity extends Activity {
         settings.setSupportMultipleWindows(false);
         settings.setTextZoom(100);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        if (Build.VERSION.SDK_INT >= 23) {
-            settings.setOffscreenPreRaster(true);
-        }
-        if (Build.VERSION.SDK_INT >= 21) {
-            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        }
+        if (Build.VERSION.SDK_INT >= 23) settings.setOffscreenPreRaster(true);
+        if (Build.VERSION.SDK_INT >= 21) settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+
         String userAgent = settings.getUserAgentString();
         if (userAgent == null) userAgent = "Android WebView";
-        if (!userAgent.contains("DEZGRE-Mobile/")) {
-            settings.setUserAgentString(userAgent + " DEZGRE-Mobile/0.1.14");
+        final String dezgreMobileMarker = "DEZGRE-Mobile/Android";
+        if (!userAgent.contains(dezgreMobileMarker)) {
+            settings.setUserAgentString(userAgent + " " + dezgreMobileMarker);
         }
 
         webView.setWebViewClient(new WebViewClient() {
@@ -151,24 +149,21 @@ public final class PanelWebActivity extends Activity {
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 mainFrameCommitted = false;
                 nativePanelFixesApplied = false;
-                progress.setVisibility(View.VISIBLE);
-                progress.setProgress(8);
             }
 
             @Override
             public void onPageCommitVisible(WebView view, String url) {
                 mainFrameCommitted = true;
-                progress.setVisibility(View.GONE);
                 applyNativePanelFixesOnce(view);
+                dismissPreload(true);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 mainFrameCommitted = true;
-                progress.setProgress(100);
-                progress.setVisibility(View.GONE);
                 applyNativePanelFixesOnce(view);
                 CookieManager.getInstance().flush();
+                dismissPreload(true);
             }
 
             @Override
@@ -182,17 +177,6 @@ public final class PanelWebActivity extends Activity {
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public void onProgressChanged(WebView view, int newProgress) {
-                if (mainFrameCommitted) return;
-                progress.setProgress(Math.max(5, newProgress));
-                if (newProgress >= 100) {
-                    progress.setVisibility(View.GONE);
-                } else {
-                    progress.setVisibility(View.VISIBLE);
-                }
-            }
-
             @Override
             public boolean onShowFileChooser(
                     WebView webView,
@@ -222,16 +206,33 @@ public final class PanelWebActivity extends Activity {
 
         webView.setDownloadListener(new DownloadListener() {
             @Override
-            public void onDownloadStart(
-                    String url,
-                    String userAgent,
-                    String contentDisposition,
-                    String mimeType,
-                    long contentLength
-            ) {
+            public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimeType, long contentLength) {
                 download(url, userAgent, contentDisposition, mimeType);
             }
         });
+    }
+
+    private void dismissPreload(boolean animate) {
+        if (preloadDismissed) return;
+        preloadDismissed = true;
+        if (webView != null) {
+            if (animate) {
+                webView.animate().alpha(1f).setDuration(180L).start();
+            } else {
+                webView.setAlpha(1f);
+            }
+        }
+        if (preload == null) return;
+        if (!animate) {
+            root.removeView(preload);
+            preload = null;
+            return;
+        }
+        final DezgrePreloadView current = preload;
+        current.animate().alpha(0f).setDuration(180L).withEndAction(() -> {
+            if (root != null) root.removeView(current);
+            if (preload == current) preload = null;
+        }).start();
     }
 
     private void applyNativePanelFixesOnce(final WebView view) {
@@ -263,7 +264,9 @@ public final class PanelWebActivity extends Activity {
                 int parsed = Color.parseColor(color);
                 if (root != null) root.setBackgroundColor(parsed);
                 if (webView != null) webView.setBackgroundColor(parsed);
+                getWindow().setStatusBarColor(parsed);
                 getWindow().setNavigationBarColor(parsed);
+                setLightSystemBars(isLightColor(parsed));
             } catch (Exception ignored) {}
         });
     }
@@ -312,7 +315,7 @@ public final class PanelWebActivity extends Activity {
             if (cookies != null && !cookies.isEmpty()) request.addRequestHeader("Cookie", cookies);
             if (userAgent != null && !userAgent.isEmpty()) request.addRequestHeader("User-Agent", userAgent);
             DownloadManager manager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
-            if (manager == null) throw new IllegalStateException("DownloadManager unavailable");
+            if (manager == null) throw new IllegalStateException("Download manager unavailable");
             manager.enqueue(request);
             Toast.makeText(this, "Descargando " + fileName, Toast.LENGTH_SHORT).show();
         } catch (Exception error) {
@@ -327,6 +330,23 @@ public final class PanelWebActivity extends Activity {
         } catch (Exception ignored) {
             return false;
         }
+    }
+
+    private boolean isLightColor(int color) {
+        double luminance = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255d;
+        return luminance > 0.62d;
+    }
+
+    private void setLightSystemBars(boolean light) {
+        if (Build.VERSION.SDK_INT < 23) return;
+        int flags = getWindow().getDecorView().getSystemUiVisibility();
+        if (light) flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        else flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        if (Build.VERSION.SDK_INT >= 26) {
+            if (light) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            else flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        }
+        getWindow().getDecorView().setSystemUiVisibility(flags);
     }
 
     private int dp(int value) {
