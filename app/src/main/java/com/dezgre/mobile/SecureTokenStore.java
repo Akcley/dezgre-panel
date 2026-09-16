@@ -16,13 +16,36 @@ import javax.crypto.spec.GCMParameterSpec;
 
 public final class SecureTokenStore {
     private static final String KEYSTORE = "AndroidKeyStore";
+    // Keep the existing alias/prefs so APK updates reuse the same Android Keystore material.
     private static final String KEY_ALIAS = "dezgre_mobile_api_v1_token";
     private static final String PREFS = "dezgre_mobile_secure";
     private static final String TOKEN_KEY = "api_v1_bearer";
+    private static final String REFRESH_KEY = "api_v1_refresh";
+    private static final String ACCESS_EXPIRES_AT_KEY = "api_v1_access_expires_at";
+    private static final String REFRESH_EXPIRES_AT_KEY = "api_v1_refresh_expires_at";
+
+    public static final class Session {
+        public final String accessToken;
+        public final String refreshToken;
+        public final long accessExpiresAtMs;
+        public final long refreshExpiresAtMs;
+
+        Session(String accessToken, String refreshToken, long accessExpiresAtMs, long refreshExpiresAtMs) {
+            this.accessToken = clean(accessToken);
+            this.refreshToken = clean(refreshToken);
+            this.accessExpiresAtMs = accessExpiresAtMs;
+            this.refreshExpiresAtMs = refreshExpiresAtMs;
+        }
+
+        public boolean hasAccess() { return !accessToken.isEmpty(); }
+        public boolean hasRefresh() { return !refreshToken.isEmpty(); }
+        public boolean hasAny() { return hasAccess() || hasRefresh(); }
+    }
+
     private final SharedPreferences preferences;
 
     public SecureTokenStore(Context context) {
-        preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        preferences = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
     private SecretKey getOrCreateKey() throws Exception {
@@ -42,23 +65,79 @@ public final class SecureTokenStore {
         return generator.generateKey();
     }
 
+    // Backward-compatible access-token save. It intentionally leaves an existing refresh token intact.
     public synchronized void save(String token) throws Exception {
-        if (token == null || token.trim().isEmpty()) {
-            clear();
+        String clean = clean(token);
+        if (clean.isEmpty()) {
+            clearAccessOnly();
             return;
         }
-        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey());
-        byte[] encrypted = cipher.doFinal(token.getBytes(StandardCharsets.UTF_8));
-        String value = Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP)
-                + ":"
-                + Base64.encodeToString(encrypted, Base64.NO_WRAP);
-        preferences.edit().putString(TOKEN_KEY, value).apply();
+        preferences.edit()
+                .putString(TOKEN_KEY, encrypt(clean))
+                .commit();
+    }
+
+    public synchronized void saveSession(
+            String accessToken,
+            String refreshToken,
+            long accessExpiresInSeconds,
+            long refreshExpiresInSeconds
+    ) throws Exception {
+        String access = clean(accessToken);
+        String refresh = clean(refreshToken);
+        if (access.isEmpty()) throw new IllegalArgumentException("Missing access token");
+
+        long now = System.currentTimeMillis();
+        SharedPreferences.Editor editor = preferences.edit()
+                .putString(TOKEN_KEY, encrypt(access))
+                .putLong(ACCESS_EXPIRES_AT_KEY, expiryMs(now, accessExpiresInSeconds));
+        if (refresh.isEmpty()) {
+            editor.remove(REFRESH_KEY).remove(REFRESH_EXPIRES_AT_KEY);
+        } else {
+            editor.putString(REFRESH_KEY, encrypt(refresh))
+                    .putLong(REFRESH_EXPIRES_AT_KEY, expiryMs(now, refreshExpiresInSeconds));
+        }
+        if (!editor.commit()) throw new IllegalStateException("Session persistence failed");
+    }
+
+    public synchronized Session loadSession() {
+        String access = loadEncrypted(TOKEN_KEY, false);
+        String refresh = loadEncrypted(REFRESH_KEY, false);
+        long accessExpires = preferences.getLong(ACCESS_EXPIRES_AT_KEY, 0L);
+        long refreshExpires = preferences.getLong(REFRESH_EXPIRES_AT_KEY, 0L);
+        return new Session(access, refresh, accessExpires, refreshExpires);
     }
 
     public synchronized String load() {
-        String stored = preferences.getString(TOKEN_KEY, null);
-        if (stored == null || stored.isEmpty()) return null;
+        Session session = loadSession();
+        return session.hasAccess() ? session.accessToken : null;
+    }
+
+    public synchronized void clearAccessOnly() {
+        preferences.edit().remove(TOKEN_KEY).remove(ACCESS_EXPIRES_AT_KEY).commit();
+    }
+
+    public synchronized void clear() {
+        preferences.edit()
+                .remove(TOKEN_KEY)
+                .remove(REFRESH_KEY)
+                .remove(ACCESS_EXPIRES_AT_KEY)
+                .remove(REFRESH_EXPIRES_AT_KEY)
+                .commit();
+    }
+
+    private String encrypt(String value) throws Exception {
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey());
+        byte[] encrypted = cipher.doFinal(value.getBytes(StandardCharsets.UTF_8));
+        return Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP)
+                + ":"
+                + Base64.encodeToString(encrypted, Base64.NO_WRAP);
+    }
+
+    private String loadEncrypted(String key, boolean clearAllOnFailure) {
+        String stored = preferences.getString(key, null);
+        if (stored == null || stored.isEmpty()) return "";
         try {
             String[] parts = stored.split(":", 2);
             if (parts.length != 2) throw new IllegalStateException("Bad encrypted token");
@@ -68,12 +147,31 @@ public final class SecureTokenStore {
             cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), new GCMParameterSpec(128, iv));
             return new String(cipher.doFinal(data), StandardCharsets.UTF_8);
         } catch (Exception error) {
-            clear();
-            return null;
+            if (clearAllOnFailure) {
+                clear();
+            } else {
+                SharedPreferences.Editor editor = preferences.edit().remove(key);
+                if (TOKEN_KEY.equals(key)) editor.remove(ACCESS_EXPIRES_AT_KEY);
+                if (REFRESH_KEY.equals(key)) editor.remove(REFRESH_EXPIRES_AT_KEY);
+                editor.commit();
+            }
+            return "";
         }
     }
 
-    public synchronized void clear() {
-        preferences.edit().remove(TOKEN_KEY).apply();
+    private static long expiryMs(long now, long seconds) {
+        if (seconds <= 0) return 0L;
+        long delta;
+        try {
+            delta = Math.multiplyExact(seconds, 1000L);
+        } catch (ArithmeticException ignored) {
+            return Long.MAX_VALUE;
+        }
+        if (Long.MAX_VALUE - now < delta) return Long.MAX_VALUE;
+        return now + delta;
+    }
+
+    private static String clean(String value) {
+        return value == null ? "" : value.trim();
     }
 }
