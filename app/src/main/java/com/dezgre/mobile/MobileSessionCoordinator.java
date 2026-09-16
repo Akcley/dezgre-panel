@@ -61,8 +61,7 @@ final class MobileSessionCoordinator {
                     String access = persistAuthResponse(context, tokenStore, json);
                     callback.onSuccess(access);
                 } catch (Exception storageError) {
-                    // The old refresh has already rotated. If secure persistence fails,
-                    // the local session is no longer recoverable safely.
+                    // Secure-storage corruption after a rotation is not recoverable safely.
                     tokenStore.clear();
                     callback.onAuthRequired();
                 }
@@ -74,7 +73,8 @@ final class MobileSessionCoordinator {
                     tokenStore.clear();
                     callback.onAuthRequired();
                 } else {
-                    // Network/temporary server failures must not destroy a valid refresh session.
+                    // Network, malformed-request, or temporary server failures must not
+                    // destroy a locally valid refresh session.
                     callback.onTemporaryFailure();
                 }
             }
@@ -121,7 +121,7 @@ final class MobileSessionCoordinator {
 
     private static boolean isTerminalRefreshFailure(ApiClient.ApiException error) {
         if (error == null) return false;
-        return error.status == 400 || error.status == 401 || error.status == 403;
+        return error.status == 401 || error.status == 403;
     }
 
     private static String clean(String value) {
