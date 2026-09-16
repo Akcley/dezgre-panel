@@ -440,7 +440,7 @@ logout_old = '''                final String logoutBearer = bearer;
                                             logout.setText("Cerrar sesión en este dispositivo");
                                             android.widget.Toast.makeText(
                                                     MainActivity.this,
-                                                    "No se pudo cerrar la sesión en este dispositivo. Inténtalo nuevamente.",
+                                                    "No se pudo retirar este dispositivo de API V1 (" + code + "). Reintenta el cierre de sesión.",
                                                     android.widget.Toast.LENGTH_LONG
                                             ).show();
                                             return;
@@ -482,10 +482,65 @@ logout_new = '''                final String logoutBearer = bearer;
                         });'''
 replace_once(logout_old, logout_new, "mobile logout contract")
 
-# Human-facing cleanup. Internal protocol identifiers remain internal.
+fallback_error_method = '''    private void handlePrivateError(final ApiClient.ApiException error, final String fallback) {
+        runOnUiThread(new Runnable() {
+            @Override public void run() {
+                if (error.status == 401 || error.status == 403) {
+                    MobileSessionCoordinator.refresh(MainActivity.this, api, tokenStore,
+                            new MobileSessionCoordinator.RefreshCallback() {
+                                @Override public void onSuccess(final String accessToken) {
+                                    runOnUiThread(new Runnable() {
+                                        @Override public void run() {
+                                            bearer = accessToken;
+                                            showMain(currentTab);
+                                        }
+                                    });
+                                }
+
+                                @Override public void onAuthRequired() {
+                                    runOnUiThread(new Runnable() {
+                                        @Override public void run() {
+                                            bearer = null;
+                                            currentStoreId = "";
+                                            currentUserAvatar = "";
+                                            showLogin("Tu sesión terminó. Inicia sesión nuevamente.");
+                                        }
+                                    });
+                                }
+
+                                @Override public void onTemporaryFailure() {
+                                    runOnUiThread(new Runnable() {
+                                        @Override public void run() { showFallbackRetry(fallback); }
+                                    });
+                                }
+                            });
+                    return;
+                }
+                showFallbackRetry(fallback);
+            }
+        });
+    }
+
+    private void showFallbackRetry(final String fallback) {
+        if (body == null) return;
+        body.removeAllViews();
+        LinearLayout errorCard = card();
+        errorCard.addView(text(fallback, 17, DANGER, true));
+        errorCard.addView(gap(6));
+        errorCard.addView(text("Inténtalo nuevamente.", 13, MUTED, false));
+        body.addView(errorCard);
+        Button retry = button("Reintentar", true);
+        retry.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { showMain(currentTab); }
+        });
+        body.addView(retry);
+    }
+
+'''
+replace_method("    private void handlePrivateError(", "    private void hideKeyboard() {", fallback_error_method, "fallback refresh")
+
 replacements = {
-    '"Controla el permiso de Android y verifica el estado FCM de este teléfono."':
-        '"Controla los avisos de DEZGRE en este teléfono."',
+    '"Controla el permiso de Android y verifica el estado FCM de este teléfono."': '"Controla los avisos de DEZGRE en este teléfono."',
     '''        String fcmLabel = PushRegistrationCoordinator.isFirebaseConfigured(this)
                 ? MobilePushRegistration.statusLabel(this, bearer)
                 : "Firebase pendiente: falta google-services.json";
@@ -498,8 +553,7 @@ replacements = {
         notifCopy.addView(gap(2));
         notifCopy.addView(text("Estado: " + notificationLabel, 11,
                 "Notificaciones activas".equals(notificationLabel) ? SUCCESS : MUTED, false));''',
-    '"La prueba local valida el canal nativo. El registro remoto se realiza automáticamente al validar la sesión."':
-        '"Puedes comprobar los avisos del teléfono o sincronizarlos manualmente cuando lo necesites."',
+    '"La prueba local valida el canal nativo. El registro remoto se realiza automáticamente al validar la sesión."': '"Puedes comprobar los avisos del teléfono o sincronizarlos manualmente cuando lo necesites."',
     'button("Sincronizar FCM ahora", false)': 'button("Sincronizar notificaciones", false)',
     'notificationStatus.setText("Sincronizando FCM con API V1…");': 'notificationStatus.setText("Sincronizando notificaciones…");',
     '''notificationStatus.setText(success
@@ -508,10 +562,8 @@ replacements = {
     '''notificationStatus.setText(success
                                                 ? "Notificaciones sincronizadas correctamente."
                                                 : "No se pudieron sincronizar las notificaciones. Inténtalo nuevamente.");''',
-    'TextView version = text("DEZGRE Mobile " + versionName + " · build " + versionCode, 10, MUTED, false);':
-        'TextView version = text("DEZGRE Mobile " + versionName, 10, MUTED, false);',
-    '"Esta sección ya existe en DEZGRE Web. En Mobile quedará operativa cuando su contrato público esté disponible en API V1; mientras tanto permanece separada para no mezclarla con Inicio ni inventar datos."':
-        '"Esta sección ya existe en DEZGRE Web. En Mobile estará disponible próximamente; mientras tanto permanece separada para mantener una experiencia clara."',
+    'TextView version = text("DEZGRE Mobile " + versionName + " · build " + versionCode, 10, MUTED, false);': 'TextView version = text("DEZGRE Mobile " + versionName, 10, MUTED, false);',
+    '"Esta sección ya existe en DEZGRE Web. En Mobile quedará operativa cuando su contrato público esté disponible en API V1; mientras tanto permanece separada para no mezclarla con Inicio ni inventar datos."': '"Esta sección ya existe en DEZGRE Web. En Mobile estará disponible próximamente; mientras tanto permanece separada para mantener una experiencia clara."',
     '"Data de producto disponible mediante Bubble API V1."': '"Consulta y revisa la información de tus productos."',
     '"Información disponible mediante Bubble API V1."': '"Información actual de tu producto."',
     '"Datos calculados directamente por API V1 para tu usuario y tienda."': '"Datos actualizados para tu usuario y tienda."',
@@ -527,32 +579,23 @@ for old, new in replacements.items():
     changed = True
 
 for forbidden in (
-    "Sincronizar FCM",
-    "Sincronizando FCM",
-    "FCM registrado correctamente",
-    "FCM no pudo registrarse",
-    "Firebase pendiente",
-    "Push: ",
-    "API V1",
-    "Bubble API",
-    "Android Keystore",
-    "La API no devolvió",
-    " · build ",
-    "No se recibió el Bearer de tienda",
+    "Sincronizar FCM", "Sincronizando FCM", "FCM registrado correctamente", "FCM no pudo registrarse",
+    "Firebase pendiente", "Push: ", "API V1", "Bubble API", "Android Keystore", "La API no devolvió",
+    " · build ", "No se recibió el Bearer de tienda",
 ):
     if forbidden in source:
         raise SystemExit(f"Technical user-facing text remains in MainActivity: {forbidden}")
 
 for required in (
     'body.put("deviceId", MobilePushRegistration.deviceId(MainActivity.this));',
-    "MobileSessionCoordinator.persistAuthResponse",
-    "MobileSessionCoordinator.refresh",
-    "MobileSessionCoordinator.logout",
-    "new DezgrePreloadView(this)",
-    'togglePassword.setText(visible ? "Ocultar" : "Mostrar")',
+    "MobileSessionCoordinator.persistAuthResponse", "MobileSessionCoordinator.refresh", "MobileSessionCoordinator.logout",
+    "new DezgrePreloadView(this)", 'togglePassword.setText(visible ? "Ocultar" : "Mostrar")',
 ):
     if required not in source:
         raise SystemExit(f"Required mobile session/presentation wiring missing: {required}")
+
+if "validateSession();" in source:
+    raise SystemExit("Legacy validateSession call still reachable")
 
 if changed:
     main_path.write_text(source, encoding="utf-8")
