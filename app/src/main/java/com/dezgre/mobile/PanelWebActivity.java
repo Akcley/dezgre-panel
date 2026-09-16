@@ -12,6 +12,7 @@ import android.os.Environment;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowInsetsController;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.ValueCallback;
@@ -41,10 +42,7 @@ public final class PanelWebActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        Window window = getWindow();
-        window.setStatusBarColor(PRELOAD_BG);
-        window.setNavigationBarColor(PRELOAD_BG);
-        setLightSystemBars(true);
+        applySystemBarTheme(PRELOAD_BG);
 
         String accessUrl = getIntent().getStringExtra(EXTRA_ACCESS_URL);
         if (accessUrl == null || !isHttpsUrl(accessUrl)) {
@@ -264,9 +262,7 @@ public final class PanelWebActivity extends Activity {
                 int parsed = Color.parseColor(color);
                 if (root != null) root.setBackgroundColor(parsed);
                 if (webView != null) webView.setBackgroundColor(parsed);
-                getWindow().setStatusBarColor(parsed);
-                getWindow().setNavigationBarColor(parsed);
-                setLightSystemBars(isLightColor(parsed));
+                applySystemBarTheme(parsed);
             } catch (Exception ignored) {}
         });
     }
@@ -337,16 +333,39 @@ public final class PanelWebActivity extends Activity {
         return luminance > 0.62d;
     }
 
-    private void setLightSystemBars(boolean light) {
+    private void applySystemBarTheme(int color) {
+        Window window = getWindow();
+        boolean light = isLightColor(color);
+        window.setStatusBarColor(color);
+        window.setNavigationBarColor(color);
+
+        if (Build.VERSION.SDK_INT >= 28) {
+            window.setNavigationBarDividerColor(color);
+        }
+        if (Build.VERSION.SDK_INT >= 29) {
+            window.setNavigationBarContrastEnforced(false);
+        }
+
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(true);
+            WindowInsetsController controller = window.getInsetsController();
+            if (controller != null) {
+                int mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                        | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance(light ? mask : 0, mask);
+            }
+            return;
+        }
+
         if (Build.VERSION.SDK_INT < 23) return;
-        int flags = getWindow().getDecorView().getSystemUiVisibility();
+        int flags = window.getDecorView().getSystemUiVisibility();
         if (light) flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
         else flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
         if (Build.VERSION.SDK_INT >= 26) {
             if (light) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
             else flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         }
-        getWindow().getDecorView().setSystemUiVisibility(flags);
+        window.getDecorView().setSystemUiVisibility(flags);
     }
 
     private int dp(int value) {
