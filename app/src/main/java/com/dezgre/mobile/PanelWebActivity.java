@@ -12,6 +12,7 @@ import android.os.Environment;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
@@ -46,6 +47,7 @@ public final class PanelWebActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         Window window = getWindow();
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         window.setStatusBarColor(PRELOAD_BG);
         window.setNavigationBarColor(PRELOAD_BG);
         setLightSystemBars(true);
