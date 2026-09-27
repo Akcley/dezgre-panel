@@ -10,12 +10,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
-import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+
+import java.util.Locale;
 
 final class DezgreNotificationManager {
     static final int REQUEST_NOTIFICATIONS = 4107;
@@ -24,14 +25,26 @@ final class DezgreNotificationManager {
     static final String EXTRA_EVENT_ID = "dezgre_notification_event_id";
     static final String EXTRA_EVENT_TYPE = "dezgre_notification_event_type";
     static final String EXTRA_STORE_ID = "dezgre_notification_store_id";
+
     private static final String EXTRA_DEEP_LINK = "dezgre_deep_link";
     private static final String GROUP_ID = "dezgre_events";
     private static final long[] DEFAULT_VIBRATION = new long[]{0, 180, 90, 180};
 
+    private static final String CATEGORY_GENERAL = "general";
+    private static final String CATEGORY_SUPPORT = "support";
+    private static final String CATEGORY_SALE = "sale";
+    private static final String CATEGORY_REGISTERED = "registered";
+
+    // Versioned on purpose: Android freezes a channel's sound after creation.
+    private static final String CHANNEL_GENERAL = "nativa_general_v2";
+    private static final String CHANNEL_SUPPORT = "nativa_support_v2";
+    private static final String CHANNEL_SALE = "nativa_sale_v2";
+    private static final String CHANNEL_REGISTERED = "nativa_registered_order_v2";
+
     private DezgreNotificationManager() {}
 
     static boolean hasPermission(Context context) {
-        refreshVisibleChannelLabels(context);
+        ensureOfficialChannels(context);
         if (Build.VERSION.SDK_INT >= 33
                 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             return false;
@@ -44,7 +57,7 @@ final class DezgreNotificationManager {
     }
 
     static void requestPermission(Activity activity) {
-        refreshVisibleChannelLabels(activity);
+        ensureOfficialChannels(activity);
         if (Build.VERSION.SDK_INT >= 33
                 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_NOTIFICATIONS);
@@ -63,8 +76,11 @@ final class DezgreNotificationManager {
         MobileNotificationEvent event = MobileNotificationEvent.fromJson(payload);
         if (event == null) return false;
         if (!hasPermission(context)) return false;
+
         NotificationConfig config = new NotificationConfigStore(context).get(event.storeId, event.eventType);
         if (!config.enabled) return false;
+
+        // One central eventId remains the single deduplication key.
         if (!new NotificationEventDeduplicator(context).markIfNew(event.eventId)) return false;
         return showEvent(context, event);
     }
@@ -125,8 +141,10 @@ final class DezgreNotificationManager {
 
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) return false;
-        String channelId = channelId(storeId, config);
-        ensureChannel(manager, channelId, config);
+
+        String category = categoryFor(eventType == null || eventType.isEmpty() ? eventKey : eventType);
+        String channelId = channelIdFor(category);
+        ensureOfficialChannels(context);
 
         Intent open = new Intent(context, MainActivity.class);
         open.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -148,6 +166,7 @@ final class DezgreNotificationManager {
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26
                 ? new Notification.Builder(context, channelId)
                 : new Notification.Builder(context);
+
         builder.setSmallIcon(R.drawable.ic_notification_dezgre)
                 .setContentTitle(title == null || title.isEmpty() ? "DEZGRE" : title)
                 .setContentText(body == null ? "" : body)
@@ -160,14 +179,8 @@ final class DezgreNotificationManager {
                 .setVisibility(Notification.VISIBILITY_PRIVATE);
 
         if (Build.VERSION.SDK_INT < 26) {
-            if ("silent".equalsIgnoreCase(config.soundMode)) {
-                builder.setSound(null);
-            } else if ("custom".equalsIgnoreCase(config.soundMode) && !config.localSoundUri.isEmpty()) {
-                builder.setSound(Uri.parse(config.localSoundUri));
-                builder.setVibrate(DEFAULT_VIBRATION);
-            } else {
-                builder.setDefaults(Notification.DEFAULT_SOUND | Notification.DEFAULT_VIBRATE);
-            }
+            builder.setSound(officialSoundUri(context, category));
+            builder.setVibrate(DEFAULT_VIBRATION);
         }
 
         int id = notificationId == null || notificationId.isEmpty()
@@ -182,22 +195,10 @@ final class DezgreNotificationManager {
             requestPermission(activity);
             return false;
         }
-        resetOldTestChannels(activity);
-        String testEvent = "mobile_test";
-        NotificationConfigStore store = new NotificationConfigStore(activity);
-        store.put(storeId, new NotificationConfig(
-                testEvent,
-                true,
-                "default",
-                "Sonido del sistema",
-                "",
-                "",
-                "test-sound-v3"
-        ));
         return showEvent(
                 activity,
                 storeId,
-                testEvent,
+                MobileNotificationEvent.NOTIFICATION_TEST,
                 "Notificación de prueba",
                 "Las notificaciones de DEZGRE están funcionando correctamente.",
                 "",
@@ -205,61 +206,46 @@ final class DezgreNotificationManager {
         );
     }
 
-    private static void resetOldTestChannels(Context context) {
-        if (Build.VERSION.SDK_INT < 26) return;
-        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager == null) return;
-        for (NotificationChannel channel : manager.getNotificationChannels()) {
-            String id = channel.getId();
-            if (id != null && id.startsWith("dezgre_mobile_test_")) {
-                manager.deleteNotificationChannel(id);
-            }
-        }
-    }
-
-    private static void refreshVisibleChannelLabels(Context context) {
+    private static void ensureOfficialChannels(Context context) {
         if (Build.VERSION.SDK_INT < 26 || context == null) return;
         NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (manager == null) return;
+
+        // Old dynamically-generated channels keep their previous sound forever on Android.
+        // Do not reuse them; remove only this app's legacy "dezgre_*" channels.
         for (NotificationChannel channel : manager.getNotificationChannels()) {
-            String eventKey = eventKeyFromChannelId(channel.getId());
-            if (eventKey == null) continue;
-            channel.setName(channelName(eventKey));
-            channel.setDescription(channelDescription(eventKey));
-            manager.createNotificationChannel(channel);
+            String id = channel.getId();
+            if (id != null && id.startsWith("dezgre_")) {
+                manager.deleteNotificationChannel(id);
+            }
         }
+
+        ensureOfficialChannel(context, manager, CATEGORY_GENERAL);
+        ensureOfficialChannel(context, manager, CATEGORY_SUPPORT);
+        ensureOfficialChannel(context, manager, CATEGORY_SALE);
+        ensureOfficialChannel(context, manager, CATEGORY_REGISTERED);
     }
 
-    private static String eventKeyFromChannelId(String id) {
-        if (id == null) return null;
-        if (id.startsWith("dezgre_web_order_created_")) return MobileNotificationEvent.WEB_ORDER_CREATED;
-        if (id.startsWith("dezgre_ai_order_created_")) return MobileNotificationEvent.AI_ORDER_CREATED;
-        if (id.startsWith("dezgre_whatsapp_connection_disconnected_")) return MobileNotificationEvent.WHATSAPP_CONNECTION_DISCONNECTED;
-        if (id.startsWith("dezgre_whatsapp_reconnect_started_")) return MobileNotificationEvent.WHATSAPP_RECONNECT_STARTED;
-        if (id.startsWith("dezgre_notification_test_")) return MobileNotificationEvent.NOTIFICATION_TEST;
-        if (id.startsWith("dezgre_mobile_test_")) return "mobile_test";
-        if (id.startsWith("dezgre_whatsapp_message_")) return "whatsapp_message";
-        if (id.startsWith("dezgre_support_chat_")) return "support_chat";
-        return null;
-    }
-
-    private static void ensureChannel(NotificationManager manager, String channelId, NotificationConfig config) {
-        if (Build.VERSION.SDK_INT < 26) return;
-
+    private static void ensureOfficialChannel(
+            Context context,
+            NotificationManager manager,
+            String category
+    ) {
+        String channelId = channelIdFor(category);
         NotificationChannel existing = manager.getNotificationChannel(channelId);
         if (existing != null) {
-            existing.setName(channelName(config.eventKey));
-            existing.setDescription(channelDescription(config.eventKey));
+            existing.setName(channelName(category));
+            existing.setDescription(channelDescription(category));
             manager.createNotificationChannel(existing);
             return;
         }
 
         NotificationChannel channel = new NotificationChannel(
                 channelId,
-                channelName(config.eventKey),
+                channelName(category),
                 NotificationManager.IMPORTANCE_HIGH
         );
-        channel.setDescription(channelDescription(config.eventKey));
+        channel.setDescription(channelDescription(category));
         channel.enableVibration(true);
         channel.setVibrationPattern(DEFAULT_VIBRATION);
         channel.enableLights(true);
@@ -271,53 +257,63 @@ final class DezgreNotificationManager {
                 .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build();
-        if ("silent".equalsIgnoreCase(config.soundMode)) {
-            channel.setSound(null, null);
-        } else if ("custom".equalsIgnoreCase(config.soundMode) && !config.localSoundUri.isEmpty()) {
-            channel.setSound(Uri.parse(config.localSoundUri), attributes);
-        } else {
-            Uri sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-            channel.setSound(sound, attributes);
-        }
+        channel.setSound(officialSoundUri(context, category), attributes);
         manager.createNotificationChannel(channel);
     }
 
-    private static String channelId(String storeId, NotificationConfig config) {
-        String signature = NotificationConfigStore.safe(storeId) + "|" + config.eventKey + "|"
-                + config.soundMode + "|" + config.soundRevision + "|" + config.localSoundUri;
-        return "dezgre_" + NotificationConfigStore.safe(config.eventKey) + "_" + Integer.toHexString(signature.hashCode());
+    private static String categoryFor(String eventKey) {
+        String key = eventKey == null ? "" : eventKey.trim().toUpperCase(Locale.ROOT);
+
+        if (MobileNotificationEvent.MANUAL_ORDER_CREATED.equals(key)
+                || key.contains("REGISTERED_ORDER")
+                || key.contains("ORDER_REGISTERED")) {
+            return CATEGORY_REGISTERED;
+        }
+
+        if (MobileNotificationEvent.WEB_ORDER_CREATED.equals(key)
+                || MobileNotificationEvent.AI_ORDER_CREATED.equals(key)
+                || key.contains("NEW_SALE")
+                || key.contains("SALE_CREATED")) {
+            return CATEGORY_SALE;
+        }
+
+        if (key.contains("SUPPORT") || key.contains("WEB_CHAT") || key.contains("CHAT_WEB")) {
+            return CATEGORY_SUPPORT;
+        }
+
+        return CATEGORY_GENERAL;
     }
 
-    private static String channelName(String eventKey) {
-        if (MobileNotificationEvent.WEB_ORDER_CREATED.equals(eventKey)) return "Ventas web";
-        if (MobileNotificationEvent.AI_ORDER_CREATED.equals(eventKey)) return "Ventas por IA";
-        if (MobileNotificationEvent.WHATSAPP_CONNECTION_DISCONNECTED.equals(eventKey)
-                || MobileNotificationEvent.WHATSAPP_RECONNECT_STARTED.equals(eventKey)) return "WhatsApp";
-        if (MobileNotificationEvent.NOTIFICATION_TEST.equals(eventKey) || "mobile_test".equals(eventKey)) {
-            return "Notificaciones de prueba";
-        }
-        if ("whatsapp_message".equals(eventKey)) return "Mensajes de WhatsApp";
-        if ("support_chat".equals(eventKey)) return "Soporte";
-        return "Notificaciones de DEZGRE";
+    private static String channelIdFor(String category) {
+        if (CATEGORY_SUPPORT.equals(category)) return CHANNEL_SUPPORT;
+        if (CATEGORY_SALE.equals(category)) return CHANNEL_SALE;
+        if (CATEGORY_REGISTERED.equals(category)) return CHANNEL_REGISTERED;
+        return CHANNEL_GENERAL;
     }
 
-    private static String channelDescription(String eventKey) {
-        if (MobileNotificationEvent.WEB_ORDER_CREATED.equals(eventKey)) {
-            return "Nuevos pedidos realizados desde tu tienda web";
-        }
-        if (MobileNotificationEvent.AI_ORDER_CREATED.equals(eventKey)) {
-            return "Nuevos pedidos registrados por tu asistente";
-        }
-        if (MobileNotificationEvent.WHATSAPP_CONNECTION_DISCONNECTED.equals(eventKey)
-                || MobileNotificationEvent.WHATSAPP_RECONNECT_STARTED.equals(eventKey)) {
-            return "Estado de tus conexiones de WhatsApp";
-        }
-        if (MobileNotificationEvent.NOTIFICATION_TEST.equals(eventKey) || "mobile_test".equals(eventKey)) {
-            return "Comprueba que los avisos de DEZGRE funcionan correctamente";
-        }
-        if ("whatsapp_message".equals(eventKey)) return "Nuevos mensajes recibidos en WhatsApp";
-        if ("support_chat".equals(eventKey)) return "Nuevos mensajes de soporte";
-        return "Avisos importantes de DEZGRE";
+    private static Uri officialSoundUri(Context context, String category) {
+        return Uri.parse("android.resource://" + context.getPackageName() + "/" + rawSoundResource(category));
+    }
+
+    private static int rawSoundResource(String category) {
+        if (CATEGORY_SUPPORT.equals(category)) return R.raw.sonido_soporte;
+        if (CATEGORY_SALE.equals(category)) return R.raw.sonido_nueva_venta;
+        if (CATEGORY_REGISTERED.equals(category)) return R.raw.sonido_pedido_registrado;
+        return R.raw.sonido_general;
+    }
+
+    private static String channelName(String category) {
+        if (CATEGORY_SUPPORT.equals(category)) return "Soporte / Chat Web";
+        if (CATEGORY_SALE.equals(category)) return "Nueva venta";
+        if (CATEGORY_REGISTERED.equals(category)) return "Pedidos registrados";
+        return "General";
+    }
+
+    private static String channelDescription(String category) {
+        if (CATEGORY_SUPPORT.equals(category)) return "Mensajes y eventos de Soporte o Chat Web.";
+        if (CATEGORY_SALE.equals(category)) return "Nuevos pedidos y ventas de tu operación.";
+        if (CATEGORY_REGISTERED.equals(category)) return "Pedidos creados manualmente desde Registro de Pedidos.";
+        return "Avisos generales del sistema y WhatsApp.";
     }
 
     private static boolean isConnectionEvent(String eventType) {
