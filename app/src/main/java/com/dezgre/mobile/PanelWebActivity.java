@@ -12,7 +12,6 @@ import android.os.Environment;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
-import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
@@ -47,7 +46,6 @@ public final class PanelWebActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         Window window = getWindow();
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         window.setStatusBarColor(PRELOAD_BG);
         window.setNavigationBarColor(PRELOAD_BG);
         setLightSystemBars(true);
@@ -276,7 +274,7 @@ public final class PanelWebActivity extends Activity {
                 + "if(!root)return 'pending';"
                 + "if(!document.getElementById(id)){"
                 + "var s=document.createElement('style');s.id=id;"
-                + "s.textContent='html{scroll-behavior:auto!important}html,body,body>div:first-child,#__next,.panelShell,.panelContent,.panelRouteTransition{background-color:var(--dezgre-app-bg,#f5f5f6)!important}.panelMobileTopbar{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}.panelRouteTransition{animation:none!important}.panelSidebar{will-change:transform}.panelDrawerBackdrop{will-change:opacity}.panelDashboard .internalToolsGrid>a::before{display:none!important}@media(max-width:1023px){html,body{margin:0!important;width:100%!important;height:100%!important;min-height:0!important;overflow:hidden!important;overscroll-behavior:none!important;touch-action:auto!important}body>div:first-child,#__next{height:100%!important;min-height:0!important;overflow:hidden!important}.panelShell:not(:has(.panelNatiHome)){display:flex!important;flex-direction:column!important;width:100%!important;height:100dvh!important;min-height:0!important;overflow:hidden!important;touch-action:auto!important}.panelShell:not(:has(.panelNatiHome)) .panelMobileTopbar{position:relative!important;top:auto!important;flex:0 0 auto!important}.panelShell:not(:has(.panelNatiHome)) .panelContent{position:relative!important;flex:1 1 auto!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:none!important;scroll-behavior:auto!important;touch-action:pan-y!important;-webkit-overflow-scrolling:touch!important;will-change:scroll-position!important;scrollbar-width:none!important}.panelShell:not(:has(.panelNatiHome)) .panelContent::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}.panelShell:not(:has(.panelNatiHome)) .panelContent>*{touch-action:auto}.panelDrawerBackdrop{touch-action:none}.panelSidebar{touch-action:pan-y!important}}';"
+                + "s.textContent='html{scroll-behavior:auto!important}html,body,body>div:first-child,#__next,.panelShell,.panelContent,.panelRouteTransition{background-color:var(--dezgre-app-bg,#f5f5f6)!important}.panelMobileTopbar{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}.panelRouteTransition{animation:none!important}.panelSidebar{will-change:transform}.panelDrawerBackdrop{will-change:opacity}.panelDashboard .internalToolsGrid>a::before{display:none!important}@media(max-width:1023px){html,body{margin:0!important;width:100%!important;height:100%!important;min-height:0!important;overflow:hidden!important;overscroll-behavior:none!important;touch-action:auto!important}body>div:first-child,#__next{height:100%!important;min-height:0!important;overflow:hidden!important}.panelShell{display:flex!important;flex-direction:column!important;width:100%!important;height:100dvh!important;min-height:0!important;overflow:hidden!important;touch-action:auto!important}.panelMobileTopbar{position:relative!important;top:auto!important;flex:0 0 auto!important}.panelContent{position:relative!important;flex:1 1 auto!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;overscroll-behavior:none!important;scroll-behavior:auto!important;touch-action:pan-y!important;-webkit-overflow-scrolling:touch!important;will-change:scroll-position!important;scrollbar-width:none!important}.panelContent::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}.panelContent>*{touch-action:auto}.panelDrawerBackdrop{touch-action:none}.panelSidebar{touch-action:pan-y!important}}';"
                 + "(document.head||root).appendChild(s);"
                 + "}"
                 + "function bg(el,c){if(el&&el.style)el.style.setProperty('background-color',c,'important');}"
