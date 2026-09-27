@@ -7,6 +7,7 @@ import java.util.Locale;
 final class MobileNotificationEvent {
     static final String WEB_ORDER_CREATED = "WEB_ORDER_CREATED";
     static final String AI_ORDER_CREATED = "AI_ORDER_CREATED";
+    static final String MANUAL_ORDER_CREATED = "MANUAL_ORDER_CREATED";
     static final String WHATSAPP_CONNECTION_DISCONNECTED = "WHATSAPP_CONNECTION_DISCONNECTED";
     static final String WHATSAPP_RECONNECT_STARTED = "WHATSAPP_RECONNECT_STARTED";
     static final String NOTIFICATION_TEST = "NOTIFICATION_TEST";
@@ -62,20 +63,25 @@ final class MobileNotificationEvent {
     }
 
     static boolean isSupported(String eventType) {
-        return WEB_ORDER_CREATED.equals(eventType)
-                || AI_ORDER_CREATED.equals(eventType)
-                || WHATSAPP_CONNECTION_DISCONNECTED.equals(eventType)
-                || WHATSAPP_RECONNECT_STARTED.equals(eventType)
-                || NOTIFICATION_TEST.equals(eventType);
+        // The central notification bus is authoritative. Keeping this parser forward-compatible
+        // lets new general/support events reuse the same FCM path without adding a second push system.
+        return eventType != null && !eventType.trim().isEmpty();
     }
 
     boolean isOrderEvent() {
-        return WEB_ORDER_CREATED.equals(eventType) || AI_ORDER_CREATED.equals(eventType);
+        return WEB_ORDER_CREATED.equals(eventType)
+                || AI_ORDER_CREATED.equals(eventType)
+                || MANUAL_ORDER_CREATED.equals(eventType);
     }
 
     String routeTab() {
         if (NOTIFICATION_TEST.equals(eventType)) return "home";
-        return isOrderEvent() ? "orders" : "connections";
+        if (isOrderEvent()) return "orders";
+        if (WHATSAPP_CONNECTION_DISCONNECTED.equals(eventType)
+                || WHATSAPP_RECONNECT_STARTED.equals(eventType)) {
+            return "connections";
+        }
+        return "home";
     }
 
     String resolvedTitle() {
@@ -83,6 +89,7 @@ final class MobileNotificationEvent {
         if (!title.isEmpty()) return title;
         if (WEB_ORDER_CREATED.equals(eventType)) return "Nueva venta web";
         if (AI_ORDER_CREATED.equals(eventType)) return "Nueva venta de NATI";
+        if (MANUAL_ORDER_CREATED.equals(eventType)) return "Pedido registrado";
         if (WHATSAPP_CONNECTION_DISCONNECTED.equals(eventType)) return "WhatsApp desconectado";
         if (WHATSAPP_RECONNECT_STARTED.equals(eventType)) return "Reconexión de WhatsApp";
         return "DEZGRE";
