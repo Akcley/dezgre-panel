@@ -69,12 +69,16 @@ final class DezgreNotificationManager {
     }
 
     static int applyRemoteConfig(Context context, String storeId, JSONArray configs) {
-        return new NotificationConfigStore(context).applyRemote(storeId, configs);
+        int saved = new NotificationConfigStore(context).applyRemote(storeId, configs);
+        if (configs != null) for (int i = 0; i < configs.length(); i++)
+            NotificationSoundCache.prepare(context, storeId, NotificationConfig.fromJson(configs.optJSONObject(i)));
+        return saved;
     }
 
     static boolean showPayload(Context context, JSONObject payload) {
         MobileNotificationEvent event = MobileNotificationEvent.fromJson(payload);
         if (event == null) return false;
+        NotificationSoundCache.acceptPayload(context, event.storeId, event.eventType, payload);
         if (!hasPermission(context)) return false;
 
         NotificationConfig config = new NotificationConfigStore(context).get(event.storeId, event.eventType);
@@ -143,8 +147,14 @@ final class DezgreNotificationManager {
         if (manager == null) return false;
 
         String category = categoryFor(eventType == null || eventType.isEmpty() ? eventKey : eventType);
-        String channelId = channelIdFor(category);
-        ensureOfficialChannels(context);
+        if ("sonido_soporte".equals(config.soundName)) category = CATEGORY_SUPPORT;
+        else if ("sonido_nueva_venta".equals(config.soundName)) category = CATEGORY_SALE;
+        else if ("sonido_pedido_registrado".equals(config.soundName)) category = CATEGORY_REGISTERED;
+        else if ("sonido_general".equals(config.soundName)) category = CATEGORY_GENERAL;
+        Uri sound = "silent".equals(config.soundMode) ? null : NotificationSoundCache.cached(context, storeId, config);
+        if (sound == null && !"silent".equals(config.soundMode)) sound = officialSoundUri(context, category);
+        NotificationSoundCache.prepare(context, storeId, config);
+        String channelId = configuredChannel(context, manager, storeId, eventKey, category, sound);
 
         Intent open = new Intent(context, MainActivity.class);
         open.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -179,7 +189,7 @@ final class DezgreNotificationManager {
                 .setVisibility(Notification.VISIBILITY_PRIVATE);
 
         if (Build.VERSION.SDK_INT < 26) {
-            builder.setSound(officialSoundUri(context, category));
+            builder.setSound(sound);
             builder.setVibrate(DEFAULT_VIBRATION);
         }
 
@@ -261,6 +271,35 @@ final class DezgreNotificationManager {
         manager.createNotificationChannel(channel);
     }
 
+    private static String configuredChannel(Context context, NotificationManager manager, String store,
+            String event, String category, Uri sound) {
+        String fallback = channelIdFor(category);
+        if (Build.VERSION.SDK_INT < 26) return fallback;
+        android.content.SharedPreferences prefs = context.getSharedPreferences("notification_channels_v3", Context.MODE_PRIVATE);
+        String scope = NotificationSoundCache.hash(store + "\n" + event);
+        String previousId = prefs.getString(scope, fallback);
+        NotificationChannel previous = manager.getNotificationChannel(previousId);
+        // Preserve Android's user choices, including muted channels. Never delete/recreate them to bypass a choice.
+        if (previous != null && (previous.getImportance() == NotificationManager.IMPORTANCE_NONE
+                || (Build.VERSION.SDK_INT >= 30 && previous.hasUserSetSound()))) return previousId;
+        if (officialSoundUri(context, category).equals(sound) && fallback.equals(previousId)) return fallback;
+        String id = "remote_sound_" + NotificationSoundCache.hash(scope + "\n" + String.valueOf(sound));
+        if (manager.getNotificationChannel(id) == null) {
+            NotificationChannel channel = new NotificationChannel(id, channelName(category),
+                    previous == null ? NotificationManager.IMPORTANCE_HIGH : previous.getImportance());
+            channel.setDescription(channelDescription(category));
+            channel.enableVibration(previous == null || previous.shouldVibrate());
+            channel.setVibrationPattern(previous == null ? DEFAULT_VIBRATION : previous.getVibrationPattern());
+            channel.setShowBadge(previous == null || previous.canShowBadge());
+            channel.setLockscreenVisibility(Notification.VISIBILITY_PRIVATE);
+            channel.setSound(sound, new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+            manager.createNotificationChannel(channel);
+        }
+        prefs.edit().putString(scope, id).apply();
+        return id;
+    }
+
     private static String categoryFor(String eventKey) {
         String key = eventKey == null ? "" : eventKey.trim().toUpperCase(Locale.ROOT);
 
@@ -321,3 +360,4 @@ final class DezgreNotificationManager {
                 || MobileNotificationEvent.WHATSAPP_RECONNECT_STARTED.equals(eventType);
     }
 }
+

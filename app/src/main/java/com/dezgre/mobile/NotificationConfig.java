@@ -76,3 +76,4 @@ final class NotificationConfig {
         return trimmed.isEmpty() ? fallback : trimmed;
     }
 }
+

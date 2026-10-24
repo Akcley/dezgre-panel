@@ -63,3 +63,4 @@ final class NotificationConfigStore {
         return value.trim().toLowerCase().replaceAll("[^a-z0-9._-]", "_");
     }
 }
+

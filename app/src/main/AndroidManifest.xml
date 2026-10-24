@@ -18,6 +18,10 @@
             android:name="com.google.firebase.messaging.default_notification_color"
             android:resource="@color/dezgre_notification_accent" />
 
+        <provider android:name=".NotificationSoundProvider"
+            android:authorities="${applicationId}.notification-sounds"
+            android:exported="true" android:grantUriPermissions="false" />
+
         <service
             android:name=".DezgreFirebaseMessagingService"
             android:exported="false">
@@ -42,3 +46,4 @@
         </activity>
     </application>
 </manifest>
+

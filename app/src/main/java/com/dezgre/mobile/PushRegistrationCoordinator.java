@@ -143,6 +143,7 @@ final class PushRegistrationCoordinator {
                 if (store != null) {
                     diagnostics.recordStoreScope(store.optString("id", ""), store.optString("name", ""));
                 }
+                syncSounds(app, bearer);
                 scopeApi.shutdown();
             }
 
@@ -150,6 +151,17 @@ final class PushRegistrationCoordinator {
             public void onError(ApiClient.ApiException error) {
                 scopeApi.shutdown();
             }
+        });
+    }
+
+    private static void syncSounds(Context context, String bearer) {
+        ApiClient api = new ApiClient();
+        api.get("/notifications/config", bearer, new ApiClient.Callback() {
+            @Override public void onSuccess(JSONObject json) {
+                DezgreNotificationManager.applyRemoteConfig(context, json.optString("storeId", ""), json.optJSONArray("configs"));
+                api.shutdown();
+            }
+            @Override public void onError(ApiClient.ApiException error) { api.shutdown(); }
         });
     }
 
@@ -161,3 +173,4 @@ final class PushRegistrationCoordinator {
         if (callback != null) callback.onComplete(success, code == null ? "" : code);
     }
 }
+
