@@ -40,29 +40,29 @@ jobs:
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" "platform-tools"
 
-      - name: Restore stable preview signing key
-        id: preview-signing-cache
+      - name: Restore stable preview signing identity v2
         uses: actions/cache@v4
         with:
-          path: .signing/dezgre-preview.jks
-          key: dezgre-mobile-preview-signing-v1
+          path: .signing-v2
+          key: dezgre-mobile-preview-signing-v2-20261026
 
-      - name: Restore and verify existing signing identity
+      - name: Verify stable signing identity v2
         shell: bash
-        env:
-          DEZGRE_ANDROID_KEYSTORE_BASE64: ${{ secrets.DEZGRE_ANDROID_KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
-          mkdir -p .signing
-          if [ -n "$DEZGRE_ANDROID_KEYSTORE_BASE64" ]; then
-            printf '%s' "$DEZGRE_ANDROID_KEYSTORE_BASE64" | base64 --decode > .signing/dezgre-preview.jks
-          fi
-          if [ ! -s .signing/dezgre-preview.jks ]; then
-            echo "::error::Original signing key missing. Restore DEZGRE_ANDROID_KEYSTORE_BASE64; never generate a replacement identity."
+          if [ ! -s .signing-v2/dezgre-preview-v2.jks ] || [ ! -s .signing-v2/signing.env ]; then
+            echo "::error::Stable v2 signing backup is missing. Restore dezgre-preview-v2.jks from the owner backup; never generate another identity."
             exit 1
           fi
-          keytool -list -v -keystore .signing/dezgre-preview.jks -storepass dezgre-preview-v1 -alias dezgre-preview > .signing/certificate.txt
-          grep -q '72:5C:0E:C1:A7:2C:7B:FD:08:3A:CF:5C:4C:EC:3D:1D:3C:72:0A:5E:3D:37:86:B3:E0:9B:0C:59:36:AE:FB:BB' .signing/certificate.txt
+          source .signing-v2/signing.env
+          echo "::add-mask::$STOREPASS"
+          echo "::add-mask::$KEYPASS"
+          echo "DEZGRE_PREVIEW_KEYSTORE=${GITHUB_WORKSPACE}/.signing-v2/dezgre-preview-v2.jks" >> "$GITHUB_ENV"
+          echo "DEZGRE_PREVIEW_STORE_PASSWORD=$STOREPASS" >> "$GITHUB_ENV"
+          echo "DEZGRE_PREVIEW_KEY_ALIAS=$KEYALIAS" >> "$GITHUB_ENV"
+          echo "DEZGRE_PREVIEW_KEY_PASSWORD=$KEYPASS" >> "$GITHUB_ENV"
+          keytool -list -v             -keystore .signing-v2/dezgre-preview-v2.jks             -storepass "$STOREPASS"             -alias "$KEYALIAS" > .signing-v2/certificate.txt
+          grep -q '1D:12:FC:7E:42:F7:02:34:63:5E:3F:8C:04:0E:81:AB:0A:3E:F1:CA:06:2C:C2:A1:05:86:50:11:5F:60:82:DD' .signing-v2/certificate.txt
 
       - name: Reassemble generated Java source
         shell: bash
@@ -75,10 +75,6 @@ jobs:
       - name: Build APK with stable preview signature
         shell: bash
         env:
-          DEZGRE_PREVIEW_KEYSTORE: ${{ github.workspace }}/.signing/dezgre-preview.jks
-          DEZGRE_PREVIEW_STORE_PASSWORD: dezgre-preview-v1
-          DEZGRE_PREVIEW_KEY_ALIAS: dezgre-preview
-          DEZGRE_PREVIEW_KEY_PASSWORD: dezgre-preview-v1
           DEZGRE_VERSION_CODE: ${{ github.run_number }}
           DEZGRE_VERSION_NAME: 0.1.28
         run: gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
@@ -91,7 +87,7 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk dist/DEZGRE-Mobile-v0.1.28.apk
           sha256sum dist/DEZGRE-Mobile-v0.1.28.apk | tee dist/DEZGRE-Mobile-v0.1.28.apk.sha256
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/DEZGRE-Mobile-v0.1.28.apk | tee dist/DEZGRE-Mobile-v0.1.28.cert.txt
-          grep -q "Signer #1 certificate SHA-256 digest: 725c0ec1a72c7bfd083acf5c4cec3d1d3c720a5e3d3786b3e09b0c5936aefbbb" dist/DEZGRE-Mobile-v0.1.28.cert.txt
+          grep -q "Signer #1 certificate SHA-256 digest: 1d12fc7e42f70234635e3f8c040e81ab0a3ef1ca062cc2a1058650115f6082dd" dist/DEZGRE-Mobile-v0.1.28.cert.txt
           unzip -t dist/DEZGRE-Mobile-v0.1.28.apk >/dev/null
 
       - name: Upload APK artifact
@@ -115,4 +111,3 @@ jobs:
             git commit -m "build: publish DEZGRE Mobile v0.1.28 APK [skip ci]"
             git push origin HEAD:mobile-app-v1-build
           fi
-
