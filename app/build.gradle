@@ -13,7 +13,7 @@ def previewStorePassword = System.getenv('DEZGRE_PREVIEW_STORE_PASSWORD') ?: 'de
 def previewKeyAlias = System.getenv('DEZGRE_PREVIEW_KEY_ALIAS') ?: 'dezgre-preview'
 def previewKeyPassword = System.getenv('DEZGRE_PREVIEW_KEY_PASSWORD') ?: 'dezgre-preview-v1'
 def buildVersionCode = (System.getenv('DEZGRE_VERSION_CODE') ?: '2').toInteger()
-def buildVersionName = '0.1.28'
+def buildVersionName = '0.1.29'
 
 android {
     namespace 'com.dezgre.mobile'
@@ -65,5 +65,6 @@ dependencies {
     testImplementation 'org.robolectric:robolectric:4.14.1'
     implementation platform('com.google.firebase:firebase-bom:34.19.0')
     implementation 'com.google.firebase:firebase-messaging'
+    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
 }
 
