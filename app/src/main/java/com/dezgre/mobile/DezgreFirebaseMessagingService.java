@@ -12,12 +12,19 @@ public final class DezgreFirebaseMessagingService extends FirebaseMessagingServi
     public void onNewToken(String token) {
         super.onNewToken(token);
         PushRegistrationCoordinator.onTokenRotated(this, token);
+        SmsGatewayRuntime.heartbeat(this, token);
     }
 
     @Override
     public void onMessageReceived(RemoteMessage remoteMessage) {
         super.onMessageReceived(remoteMessage);
         if (remoteMessage == null) return;
+
+        Map<String, String> rawData = remoteMessage.getData();
+        if (rawData != null && "SMS_GATEWAY_COMMAND".equals(rawData.get("kind"))) {
+            SmsGatewayRuntime.handleCommand(this, rawData.get("smsCommandId"));
+            return;
+        }
 
         JSONObject payload = new JSONObject();
         try {
