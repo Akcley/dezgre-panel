@@ -379,6 +379,16 @@ public final class PanelWebActivity extends Activity {
     private boolean handleNavigation(Uri uri) {
         if (uri == null) return false;
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
+        if ("dezgre".equals(scheme)
+                && "sms".equalsIgnoreCase(uri.getHost())
+                && "/pair/scan".equals(uri.getPath())) {
+            try {
+                startActivity(new Intent(this, SmsPairingActivity.class));
+            } catch (Exception ignored) {
+                Toast.makeText(this, "No se pudo abrir el escáner SMS.", Toast.LENGTH_LONG).show();
+            }
+            return true;
+        }
         if ("http".equals(scheme) || "https".equals(scheme)) {
             String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase();
             if ("wa.me".equals(host) || host.endsWith(".whatsapp.com") || host.endsWith("maps.google.com")) {
