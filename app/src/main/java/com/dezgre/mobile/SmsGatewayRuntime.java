@@ -176,7 +176,7 @@ final class SmsGatewayRuntime {
             body.put("messageId", messageId);
             body.put("phone", phone);
             body.put("body", bodyText);
-            body.put("occurredAt", new java.util.Date(timestampMs).toInstant().toString());
+            body.put("occurredAt", timestampMs);
         } catch (Exception ignored) {
             return;
         }
