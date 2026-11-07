@@ -167,9 +167,10 @@ public final class SmsPairingActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 23) {
             boolean send = checkSelfPermission(Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED;
             boolean receive = checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED;
-            if (!send || !receive) {
+            boolean read = checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED;
+            if (!send || !receive || !read) {
                 requestPermissions(
-                        new String[]{Manifest.permission.SEND_SMS, Manifest.permission.RECEIVE_SMS},
+                        new String[]{Manifest.permission.SEND_SMS, Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS},
                         REQUEST_SMS_PERMISSIONS
                 );
                 return;

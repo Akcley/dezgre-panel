@@ -502,12 +502,29 @@ public final class PanelWebActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (new SecureSmsGatewayStore(this).isPaired() && !SmsNativeSentSync.hasReadPermission(this)) {
+            android.content.SharedPreferences permissions=getSharedPreferences("sms_native_sync_permissions",MODE_PRIVATE);
+            if (!permissions.getBoolean("asked_read_sms",false)) {
+                permissions.edit().putBoolean("asked_read_sms",true).apply();
+                requestPermissions(new String[]{android.Manifest.permission.READ_SMS},6204);
+            }
+        }
         smsHandler.removeCallbacks(smsHeartbeat);
         smsHandler.post(smsHeartbeat);
         if (webView != null) {
             webView.resumeTimers();
             webView.onResume();
             synchronizePanelTheme(webView, false);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code,String[] permissions,int[] results) {
+        super.onRequestPermissionsResult(code,permissions,results);
+        if(code==6204) {
+            SmsGatewayRuntime.heartbeat(getApplicationContext(),new SecurePushStore(this).loadPushToken());
+            if(!SmsNativeSentSync.hasReadPermission(this))Toast.makeText(this,
+                    "Autoriza leer SMS para sincronizar los enviados desde la app de mensajes.",Toast.LENGTH_LONG).show();
         }
     }
 

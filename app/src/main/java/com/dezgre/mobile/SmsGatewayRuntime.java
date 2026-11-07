@@ -63,6 +63,7 @@ final class SmsGatewayRuntime {
             @Override
             public void onSuccess(JSONObject json) {
                 try {
+                    SmsNativeSentSync.acceptDevice(context.getApplicationContext(),json.optJSONObject("device"));
                     JSONArray commands = json.optJSONArray("commandIds");
                     if (commands != null) for (int i=0;i<commands.length();i++) {
                         handleCommand(context.getApplicationContext(), commands.optString(i, ""));
