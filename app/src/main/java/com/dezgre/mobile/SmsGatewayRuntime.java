@@ -11,6 +11,8 @@ import android.provider.Telephony;
 import android.telephony.SmsManager;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import java.util.ArrayList;
 
@@ -21,6 +23,7 @@ final class SmsGatewayRuntime {
     static final String EXTRA_DESTINATION = "sms_destination";
     static final String EXTRA_BODY = "sms_body";
 
+    private static final AtomicBoolean heartbeatRunning = new AtomicBoolean(false);
     private SmsGatewayRuntime() {}
 
     static boolean isDefaultSmsApp(Context context) {
@@ -43,6 +46,7 @@ final class SmsGatewayRuntime {
         String token = store.token();
         if (token.isEmpty()) return;
 
+        if (!heartbeatRunning.compareAndSet(false, true)) return;
         JSONObject body = new JSONObject();
         try {
             body.put("pushToken", pushToken == null ? "" : pushToken.trim());
@@ -50,17 +54,26 @@ final class SmsGatewayRuntime {
             body.put("receivePermissionGranted", hasReceivePermission(context));
             body.put("defaultSms", isDefaultSmsApp(context));
         } catch (Exception ignored) {
+            heartbeatRunning.set(false);
             return;
         }
 
         ApiClient api = new ApiClient();
         api.post("/sms/gateway/heartbeat", token, body, new ApiClient.Callback() {
             @Override
-            public void onSuccess(JSONObject json) { api.shutdown(); }
+            public void onSuccess(JSONObject json) {
+                try {
+                    JSONArray commands = json.optJSONArray("commandIds");
+                    if (commands != null) for (int i=0;i<commands.length();i++) {
+                        handleCommand(context.getApplicationContext(), commands.optString(i, ""));
+                    }
+                } finally { heartbeatRunning.set(false); api.shutdown(); }
+            }
 
             @Override
             public void onError(ApiClient.ApiException error) {
                 if (error != null && error.status == 401) store.clear();
+                heartbeatRunning.set(false);
                 api.shutdown();
             }
         });
@@ -77,16 +90,17 @@ final class SmsGatewayRuntime {
         api.post("/sms/gateway/commands/" + cleanId, token, new JSONObject(), new ApiClient.Callback() {
             @Override
             public void onSuccess(JSONObject json) {
-                api.shutdown();
                 JSONObject command = json.optJSONObject("command");
-                if (command == null) return;
+                if (command == null) { api.shutdown(); return; }
                 String destination = command.optString("destination", "").trim();
                 String body = command.optString("body", "");
                 if (destination.isEmpty() || body.isEmpty()) {
                     reportStatus(context, cleanId, "FAILED", "Orden SMS incompleta");
+                    api.shutdown();
                     return;
                 }
                 sendSms(context, cleanId, destination, body);
+                api.shutdown();
             }
 
             @Override
@@ -215,3 +229,4 @@ final class SmsGatewayRuntime {
         } catch (Exception ignored) {}
     }
 }
+

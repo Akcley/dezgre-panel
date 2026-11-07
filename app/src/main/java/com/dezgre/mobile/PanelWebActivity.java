@@ -32,6 +32,13 @@ public final class PanelWebActivity extends Activity {
     private static final int PANEL_LIGHT_BG = Color.rgb(245, 245, 246);
     private static final int PANEL_DARK_BG = Color.rgb(21, 21, 22);
 
+    private final android.os.Handler smsHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable smsHeartbeat = new Runnable() {
+        @Override public void run() {
+            SmsGatewayRuntime.heartbeat(getApplicationContext(), new SecurePushStore(PanelWebActivity.this).loadPushToken());
+            smsHandler.postDelayed(this, 5000L);
+        }
+    };
     private FrameLayout root;
     private WebView webView;
     private DezgrePreloadView preload;
@@ -377,6 +384,11 @@ public final class PanelWebActivity extends Activity {
     }
 
     private boolean handleNavigation(Uri uri) {
+        if (uri != null && "dezgre".equalsIgnoreCase(uri.getScheme()) && "sms".equalsIgnoreCase(uri.getHost()) && "/setup".equals(uri.getPath())) {
+            startActivity(new Intent(this, SmsPairingActivity.class).putExtra("sms_setup_only", true));
+            return true;
+        }
+
         if (uri == null) return false;
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
         if ("dezgre".equals(scheme)
@@ -483,12 +495,15 @@ public final class PanelWebActivity extends Activity {
             webView.onPause();
             webView.pauseTimers();
         }
+        smsHandler.removeCallbacks(smsHeartbeat);
         super.onPause();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        smsHandler.removeCallbacks(smsHeartbeat);
+        smsHandler.post(smsHeartbeat);
         if (webView != null) {
             webView.resumeTimers();
             webView.onResume();
@@ -507,6 +522,7 @@ public final class PanelWebActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        smsHandler.removeCallbacks(smsHeartbeat);
         if (fileChooserCallback != null) {
             fileChooserCallback.onReceiveValue(null);
             fileChooserCallback = null;
@@ -522,3 +538,4 @@ public final class PanelWebActivity extends Activity {
         super.onDestroy();
     }
 }
+

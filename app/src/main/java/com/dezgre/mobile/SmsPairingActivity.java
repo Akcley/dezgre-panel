@@ -29,7 +29,8 @@ public final class SmsPairingActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        startScanner();
+        if (getIntent().getBooleanExtra("sms_setup_only", false)) ensureSmsRole();
+        else startScanner();
     }
 
     private void startScanner() {
@@ -231,3 +232,4 @@ public final class SmsPairingActivity extends Activity {
         return value == null ? "" : value.trim();
     }
 }
+
