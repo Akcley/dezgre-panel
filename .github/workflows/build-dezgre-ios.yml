@@ -1,0 +1,85 @@
+name: Build DEZGRE iOS IPA 0.1.32
+on:
+  workflow_dispatch:
+  push:
+    branches: [mobile-ios-v0.1.32]
+    paths:
+      - 'ios/**'
+      - 'ios-scaffold/**'
+      - '.github/workflows/build-dezgre-ios.yml'
+permissions:
+  contents: read
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: brew install xcodegen librsvg
+      - name: Prepare project and original icon
+        run: bash ios/prepare.sh
+      - name: Compile ARM64 device app without signature
+        run: |
+          set -euo pipefail
+          xcodebuild -project ios/DEZGRE.xcodeproj -scheme DEZGRE -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/ios-unsigned" CODE_SIGNING_ALLOWED=NO build
+          mkdir -p "$RUNNER_TEMP/unsigned/Payload" ios-dist
+          cp -R "$RUNNER_TEMP/ios-unsigned/Build/Products/Release-iphoneos/DEZGRE.app" "$RUNNER_TEMP/unsigned/Payload/"
+          (cd "$RUNNER_TEMP/unsigned" && zip -qry "$GITHUB_WORKSPACE/ios-dist/DEZGRE-Mobile-v0.1.32-UNSIGNED.ipa" Payload)
+          unzip -t ios-dist/DEZGRE-Mobile-v0.1.32-UNSIGNED.ipa >/dev/null
+          shasum -a 256 ios-dist/DEZGRE-Mobile-v0.1.32-UNSIGNED.ipa > ios-dist/DEZGRE-Mobile-v0.1.32-UNSIGNED.ipa.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DEZGRE-Mobile-v0.1.32-iOS-UNSIGNED
+          path: ios-dist/*UNSIGNED*
+          if-no-files-found: error
+      - name: Optional Apple signing
+        env:
+          CERT: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          SIGN_IDENTITY: ${{ secrets.IOS_SIGNING_IDENTITY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CERT" ] && [ -z "$PROFILE" ] && [ -z "$TEAM_ID" ]; then
+            echo "::notice::No Apple signing identity configured."
+            exit 0
+          fi
+          test -n "$CERT" && test -n "$PROFILE" && test -n "$TEAM_ID"
+          if [ -z "$SIGN_IDENTITY" ]; then SIGN_IDENTITY="Apple Development"; fi
+          KEYCHAIN="$RUNNER_TEMP/dezgre-signing.keychain-db"
+          KC_PASSWORD="$(openssl rand -hex 24)"
+          trap 'security delete-keychain "$KEYCHAIN" 2>/dev/null || true; rm -f "$RUNNER_TEMP/ios.p12" "$RUNNER_TEMP/ios.mobileprovision" "$RUNNER_TEMP/profile.plist"' EXIT
+          printf %s "$CERT" | base64 -D > "$RUNNER_TEMP/ios.p12"
+          printf %s "$PROFILE" | base64 -D > "$RUNNER_TEMP/ios.mobileprovision"
+          security create-keychain -p "$KC_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KC_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/ios.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -d user -s "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PASSWORD" "$KEYCHAIN"
+          security cms -D -i "$RUNNER_TEMP/ios.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/profile.plist")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "$RUNNER_TEMP/profile.plist")
+          APP_ID=$(/usr/libexec/PlistBuddy -c 'Print Entitlements:application-identifier' "$RUNNER_TEMP/profile.plist")
+          case "$APP_ID" in "$TEAM_ID.com.dezgre.mobile") ;; *) echo "::error::Profile does not match DEZGRE"; exit 1;; esac
+          for DIR in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$DIR"; cp "$RUNNER_TEMP/ios.mobileprovision" "$DIR/$UUID.mobileprovision"
+          done
+          xcodebuild -project ios/DEZGRE.xcodeproj -scheme DEZGRE -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/ios-signed" CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$TEAM_ID" PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" CODE_SIGN_IDENTITY="$SIGN_IDENTITY" build
+          APP="$RUNNER_TEMP/ios-signed/Build/Products/Release-iphoneos/DEZGRE.app"
+          codesign --verify --deep --strict "$APP"
+          test -s "$APP/embedded.mobileprovision"
+          mkdir -p "$RUNNER_TEMP/signed/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/signed/Payload/"
+          (cd "$RUNNER_TEMP/signed" && zip -qry "$GITHUB_WORKSPACE/ios-dist/DEZGRE-Mobile-v0.1.32-SIGNED.ipa" Payload)
+          unzip -t ios-dist/DEZGRE-Mobile-v0.1.32-SIGNED.ipa >/dev/null
+          shasum -a 256 ios-dist/DEZGRE-Mobile-v0.1.32-SIGNED.ipa > ios-dist/DEZGRE-Mobile-v0.1.32-SIGNED.ipa.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DEZGRE-Mobile-v0.1.32-iOS-SIGNED
+          path: |
+            ios-dist/DEZGRE-Mobile-v0.1.32-SIGNED.ipa
+            ios-dist/DEZGRE-Mobile-v0.1.32-SIGNED.ipa.sha256
+          if-no-files-found: ignore
