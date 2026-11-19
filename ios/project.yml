@@ -1,0 +1,27 @@
+name: DEZGRE
+options:
+  bundleIdPrefix: com.dezgre
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  DEZGRE:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: ../ios-scaffold/DEZGRENativeNotifications.swift
+      - path: Assets.xcassets
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dezgre.mobile
+        MARKETING_VERSION: "0.1.32"
+        CURRENT_PROJECT_VERSION: "32"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: DEZGRE
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_NSCameraUsageDescription: "Adjunta fotos desde el panel DEZGRE."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Graba audio desde el panel DEZGRE."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Selecciona archivos multimedia para DEZGRE."
