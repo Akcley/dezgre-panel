@@ -14,8 +14,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dezgre.mobile
-        MARKETING_VERSION: "0.1.33"
-        CURRENT_PROJECT_VERSION: "33"
+        MARKETING_VERSION: "0.1.34"
+        CURRENT_PROJECT_VERSION: "34"
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

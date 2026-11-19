@@ -11,13 +11,22 @@ enum DEZGREEventType: String {
     case aiOrderCreated = "AI_ORDER_CREATED"
     case whatsappDisconnected = "WHATSAPP_CONNECTION_DISCONNECTED"
     case whatsappReconnectStarted = "WHATSAPP_RECONNECT_STARTED"
+    case notificationTest = "NOTIFICATION_TEST"
+    case metaStatusChanged = "META_STATUS_CHANGED"
+    case manualOrderCreated = "MANUAL_ORDER_CREATED"
+    case orderReceived = "ORDER_RECEIVED"
+    case orderCancelled = "ORDER_CANCELLED"
+    case productReviewCreated = "PRODUCT_REVIEW_CREATED"
+    case courierOrderUpdated = "COURIER_ORDER_UPDATED"
 
     var route: DEZGRERouteKind {
         switch self {
-        case .webOrderCreated, .aiOrderCreated:
+        case .webOrderCreated, .aiOrderCreated, .manualOrderCreated, .orderReceived, .orderCancelled, .courierOrderUpdated:
             return .orders
         case .whatsappDisconnected, .whatsappReconnectStarted:
             return .connections
+        case .notificationTest, .metaStatusChanged, .productReviewCreated:
+            return .none
         }
     }
 }
@@ -25,6 +34,7 @@ enum DEZGREEventType: String {
 enum DEZGRERouteKind {
     case orders
     case connections
+    case none
 }
 
 struct DEZGRENotificationRoute {
@@ -95,6 +105,13 @@ struct DEZGREPushEvent {
         case .aiOrderCreated: return "Nueva venta de NATI"
         case .whatsappDisconnected: return "WhatsApp desconectado"
         case .whatsappReconnectStarted: return "Reconexión de WhatsApp"
+        case .notificationTest: return "Notificación de prueba"
+        case .metaStatusChanged: return "Estado de Meta"
+        case .manualOrderCreated: return "Pedido registrado"
+        case .orderReceived: return "Pedido recibido"
+        case .orderCancelled: return "Pedido cancelado"
+        case .productReviewCreated: return "Nuevo comentario"
+        case .courierOrderUpdated: return "Pedido actualizado"
         }
     }
 }

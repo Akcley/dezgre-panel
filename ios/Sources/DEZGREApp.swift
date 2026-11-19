@@ -177,7 +177,7 @@ private struct Store: Identifiable {
         do {
             _ = try await api.request("PUT", "/notifications/devices", bearer:access, body:[
                 "platform":"ios", "provider":"apns", "pushToken":token,
-                "deviceId":deviceId, "appVersion":"0.1.33"
+                "deviceId":deviceId, "appVersion":"0.1.34"
             ])
             if tokens["access"] == access { pushRegisteredFor = identity }
             logger.info("APNs device registered in DEZGRE")
