@@ -85,6 +85,9 @@ private struct Store: Identifiable {
     @Published var stores: [Store] = []
     @Published var panelURL: URL?
     @Published var hasSession = false
+    @Published var panelColor = Color(uiColor: .systemBackground)
+    @Published var pushIssue: String?
+    private var reportedPushIssue = ""
     private let api = API()
     private let pushStore = DEZGREPushTokenStore()
     private var ticket = ""
@@ -166,6 +169,12 @@ private struct Store: Identifiable {
             PushDelegate.request()
         }
         await syncPush()
+        if let issue = PushDelegate.currentIssue { reportPushIssue(issue) }
+    }
+    func reportPushIssue(_ issue: String) {
+        guard hasSession, issue != reportedPushIssue else { return }
+        reportedPushIssue = issue
+        pushIssue = issue
     }
     func syncPush() async {
         guard hasSession, let access = tokens["access"], !access.isEmpty,
@@ -177,11 +186,15 @@ private struct Store: Identifiable {
         do {
             _ = try await api.request("PUT", "/notifications/devices", bearer:access, body:[
                 "platform":"ios", "provider":"apns", "pushToken":token,
-                "deviceId":deviceId, "appVersion":"0.1.34"
+                "deviceId":deviceId, "appVersion":"0.1.35"
             ])
             if tokens["access"] == access { pushRegisteredFor = identity }
             logger.info("APNs device registered in DEZGRE")
-        } catch { logger.error("APNs registration to DEZGRE failed") }
+        } catch {
+            logger.error("APNs registration to DEZGRE failed")
+            let code = (error as? APIError)?.status ?? 0
+            reportPushIssue("Apple entregó un token, pero DEZGRE no pudo registrar el dispositivo (HTTP " + String(code) + ").")
+        }
     }
     func webLoginReached() {
         guard panelURL != nil else { return }
@@ -217,28 +230,74 @@ private struct Panel: UIViewRepresentable {
     let dataStore: WKWebsiteDataStore
     let onError: (String) -> Void
     let onLogin: () -> Void
-    func makeCoordinator() -> Coordinator { Coordinator(initialHost:url.host ?? "", onError:onError, onLogin:onLogin) }
+    let onColor: (UIColor) -> Void
+    func makeCoordinator() -> Coordinator { Coordinator(initialHost:url.host ?? "", onError:onError, onLogin:onLogin,onColor:onColor) }
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = dataStore
         config.allowsInlineMediaPlayback = true
         config.applicationNameForUserAgent = "DEZGRE-Mobile/iOS"
+        config.userContentController.add(context.coordinator,name:"dezgrePanelColor")
+        let themeScript = """
+        (() => {
+          let previous = '';
+          function update() {
+            const node = document.querySelector('.panelContent') || document.querySelector('.panelShell') || document.body;
+            if (!node) return;
+            let c = '';
+            for (let n=node; n; n=n.parentElement) {
+              const color=getComputedStyle(n).backgroundColor;
+              if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') { c=color; break; }
+            }
+            if (c && c !== previous) {
+              previous=c;
+              window.webkit.messageHandlers.dezgrePanelColor.postMessage(c);
+            }
+          }
+          window.addEventListener('pageshow',update);
+          window.addEventListener('load',update);
+          if (document.documentElement) {
+            new MutationObserver(update).observe(document.documentElement,{attributes:true,childList:true,subtree:true,attributeFilter:['class','style','data-theme']});
+          }
+          update();
+        })();
+        """
+        config.userContentController.addUserScript(WKUserScript(source:themeScript,injectionTime:.atDocumentEnd,forMainFrameOnly:true))
         let web = WKWebView(frame:.zero, configuration:config)
         web.navigationDelegate = context.coordinator
         web.uiDelegate = context.coordinator
         web.allowsBackForwardNavigationGestures = true
         web.scrollView.bounces = false
+        web.underPageBackgroundColor = .systemBackground
+        web.scrollView.contentInsetAdjustmentBehavior = .never
         web.customUserAgent = nil
         web.load(URLRequest(url:url))
         return web
     }
     func updateUIView(_ web: WKWebView, context: Context) {}
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+    static func dismantleUIView(_ web: WKWebView, coordinator: Coordinator) {
+        web.configuration.userContentController.removeScriptMessageHandler(forName:"dezgrePanelColor")
+        web.navigationDelegate=nil
+        web.uiDelegate=nil
+        web.stopLoading()
+    }
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         let initialHost: String
         let onError: (String) -> Void
         let onLogin: () -> Void
-        init(initialHost:String, onError:@escaping (String)->Void, onLogin:@escaping ()->Void) {
-            self.initialHost=initialHost; self.onError=onError; self.onLogin=onLogin
+        let onColor:(UIColor)->Void
+        init(initialHost:String, onError:@escaping (String)->Void, onLogin:@escaping ()->Void,onColor:@escaping (UIColor)->Void) {
+            self.initialHost=initialHost; self.onError=onError; self.onLogin=onLogin; self.onColor=onColor
+        }
+        func userContentController(_ userContentController:WKUserContentController,didReceive message:WKScriptMessage) {
+            guard message.name == "dezgrePanelColor", message.frameInfo.isMainFrame,
+                let url=message.frameInfo.request.url, allowed(url), let value=message.body as? String,
+                value.hasPrefix("rgb") else { return }
+            let numbers=value.split(whereSeparator:{ !$0.isNumber && $0 != "." }).compactMap{Double($0)}
+            guard numbers.count >= 3, numbers.prefix(3).allSatisfy({ $0 >= 0 && $0 <= 255 }),
+                numbers.count == 3 || (numbers.count == 4 && numbers[3] >= 0.95) else { return }
+            let color=UIColor(red:CGFloat(numbers[0]/255),green:CGFloat(numbers[1]/255),blue:CGFloat(numbers[2]/255),alpha:1)
+            onColor(color)
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             guard let url = webView.url, allowed(url) else { return }
@@ -284,14 +343,15 @@ private struct Root: View {
         Group {
             if let url=model.panelURL {
                 ZStack(alignment:.bottom) {
-                    Panel(url:url,dataStore:model.webData,onError:{ model.message=$0 },onLogin:{ model.webLoginReached() }).id(url)
+                    Panel(url:url,dataStore:model.webData,onError:{ model.message=$0 },onLogin:{ model.webLoginReached() },onColor:{model.panelColor=Color(uiColor:$0)}).id(url)
                     if !model.message.isEmpty {
                         VStack(spacing:8) {
                             Text(model.message).font(.footnote)
                             Button("Reintentar") { Task { await model.retry() } }
                         }.padding().background(.regularMaterial,in:RoundedRectangle(cornerRadius:12)).padding()
                     }
-                }
+                }.frame(maxWidth:.infinity,maxHeight:.infinity)
+                    .background(model.panelColor.ignoresSafeArea(edges:.bottom))
             } else {
                 ScrollView {
                     VStack(spacing:0) {
@@ -315,6 +375,14 @@ private struct Root: View {
             }
         }.tint(accent).task { await model.start() }
         .onReceive(NotificationCenter.default.publisher(for:PushDelegate.tokenChanged)) { _ in Task { await model.syncPush() } }
+        .onReceive(NotificationCenter.default.publisher(for:PushDelegate.failed)) { _ in
+            if let issue=PushDelegate.currentIssue { model.reportPushIssue(issue) }
+        }
+        .alert("Notificaciones de iOS",isPresented:Binding(get:{model.pushIssue != nil},set:{if !$0 {model.pushIssue=nil}})) {
+            Button("Aceptar",role:.cancel) {model.pushIssue=nil}
+        } message: {
+            Text(model.pushIssue ?? "")
+        }
     }
     private var errorText: some View {
         Group { if !model.message.isEmpty { Text(model.message).font(.system(size:13)).foregroundColor(.red).multilineTextAlignment(.center).padding(.bottom,10) } }
@@ -391,6 +459,8 @@ private struct StoreCard: View {
 final class PushDelegate: NSObject, UIApplicationDelegate {
     static let tokenChanged = Notification.Name("DEZGREAPNSTokenChanged")
     static var currentToken: String?
+    static let failed = Notification.Name("DEZGREAPNSFailed")
+    static var currentIssue: String?
     private let coordinator = DEZGRENotificationCoordinator()
     private let logger = Logger(subsystem:"com.dezgre.mobile",category:"apns")
     func application(_ application:UIApplication,didFinishLaunchingWithOptions launchOptions:[UIApplication.LaunchOptionsKey:Any]? = nil)->Bool {
@@ -399,17 +469,27 @@ final class PushDelegate: NSObject, UIApplicationDelegate {
     }
     static func request() {
         UNUserNotificationCenter.current().requestAuthorization(options:[.alert,.sound,.badge]) { granted,error in
-            if granted { DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() } }
+            DispatchQueue.main.async {
+                if granted { UIApplication.shared.registerForRemoteNotifications() }
+                else if let error=error {
+                    Self.currentIssue="No se pudo solicitar el permiso de notificaciones: " + String((error as NSError).code)
+                    NotificationCenter.default.post(name:Self.failed,object:nil)
+                }
+            }
         }
     }
     func application(_ application:UIApplication,didRegisterForRemoteNotificationsWithDeviceToken deviceToken:Data) {
         _ = coordinator.acceptAPNSToken(deviceToken)
+        Self.currentIssue = nil
         Self.currentToken = deviceToken.map { String(format:"%02x",$0) }.joined()
         NotificationCenter.default.post(name:Self.tokenChanged,object:nil)
         logger.info("Received APNs token")
     }
     func application(_ application:UIApplication,didFailToRegisterForRemoteNotificationsWithError error:Error) {
         logger.error("APNs device registration failed: \(error.localizedDescription, privacy: .public)")
+        let code=(error as NSError).code
+        Self.currentIssue = "Apple no registró este iPhone para notificaciones push (" + String(code) + "). " + error.localizedDescription
+        NotificationCenter.default.post(name:Self.failed,object:nil)
     }
 }
 @main struct DEZGREApp: App {
