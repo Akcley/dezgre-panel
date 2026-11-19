@@ -191,11 +191,26 @@ final class DEZGREPushTokenStore {
         return token
     }
 
+    private var deviceQuery:[String:Any] {
+        [kSecClass as String:kSecClassGenericPassword,kSecAttrService as String:service,kSecAttrAccount as String:"device-id"]
+    }
+    func existingDeviceId()->String? {
+        var query=deviceQuery
+        query[kSecReturnData as String]=true
+        query[kSecMatchLimit as String]=kSecMatchLimitOne
+        var result:CFTypeRef?
+        if SecItemCopyMatching(query as CFDictionary,&result)==errSecSuccess,
+           let data=result as? Data,let value=String(data:data,encoding:.utf8),!value.isEmpty{return value}
+        return defaults.string(forKey:deviceIdKey).flatMap{$0.isEmpty ? nil : $0}
+    }
     func deviceId() -> String {
-        if let existing = defaults.string(forKey: deviceIdKey), !existing.isEmpty { return existing }
-        let generated = UUID().uuidString.lowercased()
-        defaults.set(generated, forKey: deviceIdKey)
-        return generated
+        let value=existingDeviceId() ?? UUID().uuidString.lowercased()
+        defaults.set(value,forKey:deviceIdKey)
+        var query=deviceQuery
+        query[kSecAttrAccessible as String]=kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        query[kSecValueData as String]=Data(value.utf8)
+        SecItemAdd(query as CFDictionary,nil)
+        return value
     }
 
     func registrationPayload(appVersion: String) -> [String: Any]? {

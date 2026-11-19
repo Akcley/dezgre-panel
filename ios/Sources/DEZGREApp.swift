@@ -8,6 +8,8 @@ import os
 private struct APIError: LocalizedError {
     let status: Int
     let message: String
+    let code: String?
+    init(status:Int,message:String,code:String? = nil) { self.status=status; self.message=message; self.code=code }
     var errorDescription: String? { message }
 }
 private enum Vault {
@@ -57,7 +59,7 @@ private final class API {
         let (data, response) = try await session.data(for: req)
         guard let http = response as? HTTPURLResponse else { throw APIError(status: 0, message: "Respuesta inválida.") }
         let json = ((try? JSONSerialization.jsonObject(with: data)) as? [String:Any]) ?? [:]
-        guard (200...299).contains(http.statusCode) else { throw APIError(status: http.statusCode, message: json["error"] as? String ?? "No se pudo completar la operación.") }
+        guard (200...299).contains(http.statusCode) else { throw APIError(status: http.statusCode, message: json["error"] as? String ?? "No se pudo completar la operación.", code:json["code"] as? String) }
         return json
     }
 }
@@ -99,18 +101,24 @@ private struct Store: Identifiable {
     private var pushRequested = false
     private let logger = Logger(subsystem: "com.dezgre.mobile", category: "push")
     let webData = WKWebsiteDataStore.nonPersistent()
-    var deviceId: String { pushStore.deviceId() }
+    var deviceId: String { tokens["deviceId"] ?? pushStore.deviceId() }
+    private var soundSyncing = false
 
     func start() async {
         guard !didStart else { return }
         didStart = true
         guard !tokens.isEmpty else { return }
+        if tokens["deviceId"] == nil && pushStore.existingDeviceId() == nil {
+            clearSession(message:"Inicia sesión nuevamente para vincular esta instalación.")
+            return
+        }
         await retry()
     }
     func login() async {
         guard !busy else { return }
         guard !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !password.isEmpty else { message = "Completa tu correo y contraseña."; return }
         busy = true; message = ""
+        Vault.clear(); tokens=[:]; ticket=""; stores=[]
         defer { busy = false }
         do {
             let result = try await api.request("POST", "/auth/login", body: ["email":email.trimmingCharacters(in:.whitespacesAndNewlines), "password":password, "deviceId":deviceId])
@@ -139,7 +147,7 @@ private struct Store: Identifiable {
     }
     private func persist(_ json: [String:Any]) throws {
         guard let access = json["access_token"] as? String, !access.isEmpty else { throw APIError(status:0,message:"Sesión inválida.") }
-        let next = ["access":access,"refresh":json["refresh_token"] as? String ?? ""]
+        let next = ["access":access,"refresh":json["refresh_token"] as? String ?? "", "deviceId":deviceId]
         do { try Vault.save(next) } catch { Vault.clear(); tokens = [:]; hasSession = false; throw error }
         tokens = next; hasSession = true
     }
@@ -170,6 +178,7 @@ private struct Store: Identifiable {
             PushDelegate.request()
         }
         await syncPush()
+        Task { await self.syncSounds() }
         if let issue = PushDelegate.currentIssue { reportPushIssue(issue) }
     }
     func reportPushIssue(_ issue: String) {
@@ -187,7 +196,7 @@ private struct Store: Identifiable {
         do {
             _ = try await api.request("PUT", "/notifications/devices", bearer:access, body:[
                 "platform":"ios", "provider":"apns", "pushToken":token,
-                "deviceId":deviceId, "appVersion":"0.1.36"
+                "deviceId":deviceId, "appVersion":"0.1.37"
             ])
             if tokens["access"] == access { pushRegisteredFor = identity }
             logger.info("APNs device registered in DEZGRE")
@@ -197,19 +206,35 @@ private struct Store: Identifiable {
             reportPushIssue("Apple entregó un token, pero DEZGRE no pudo registrar el dispositivo (HTTP " + String(code) + ").")
         }
     }
+    func syncSounds() async {
+        guard hasSession,!soundSyncing,let access=tokens["access"],!access.isEmpty else{return}
+        soundSyncing=true
+        defer{soundSyncing=false}
+        do {
+            let json=try await api.request("GET","/notifications/config",bearer:access)
+            guard tokens["access"]==access,let store=json["storeId"] as? String,let configs=json["configs"] as? [[String:Any]] else{return}
+            for config in configs {
+                guard tokens["access"]==access else{return}
+                guard config["soundMode"] as? String == "custom",let url=config["soundUrl"] as? String,let revision=config["soundRevision"] as? String else{continue}
+                await DEZGRESoundCache.shared.prepare(store:store,url:url,revision:revision)
+            }
+        }catch{logger.info("Notification sound sync unavailable; will retry")}
+    }
+    private func clearSession(message:String = "") {
+        Vault.clear(); tokens=[:]; pushRegisteredFor=""; hasSession=false; pushRequested=false
+        panelURL=nil;password="";stores=[];ticket="";self.message=message
+        webData.removeData(ofTypes:WKWebsiteDataStore.allWebsiteDataTypes(),modifiedSince:.distantPast){}
+    }
     func webLoginReached() {
-        guard panelURL != nil else { return }
-        Vault.clear(); tokens = [:]; pushRegisteredFor = ""; hasSession = false
-        panelURL = nil; password = ""; stores = []; ticket = ""; message = ""
-        webData.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
+        guard panelURL != nil else {return}
+        clearSession()
     }
     func retry() async {
         guard !busy else { return }; busy = true; message = ""; hasSession = !tokens.isEmpty
         defer { busy = false }
         do { try await openPanel() }
         catch let error as APIError where error.status == 401 || error.status == 403 {
-            Vault.clear(); tokens = [:]; hasSession = false; panelURL = nil; message = error.message
-            webData.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
+            clearSession(message: error.code == "REFRESH_DEVICE_MISMATCH" ? "Tu instalación cambió. Inicia sesión nuevamente." : error.message)
         } catch { message = error.localizedDescription }
     }
     func logout() async {
@@ -219,8 +244,7 @@ private struct Store: Identifiable {
             if let access = tokens["access"], !access.isEmpty {
                 _ = try await api.request("POST", "/auth/logout", bearer:access, body:["deviceId":deviceId])
             }
-            Vault.clear(); tokens = [:]; hasSession = false; panelURL = nil; stores = []; ticket = ""; password = ""
-            webData.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
+            clearSession()
         } catch { message = error.localizedDescription }
     }
     func backToLogin() { stores = []; ticket = ""; password = ""; message = "" }
@@ -239,6 +263,9 @@ private struct Panel: UIViewRepresentable {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = dataStore
         config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
+        config.allowsAirPlayForMediaPlayback = true
+        config.allowsPictureInPictureMediaPlayback = true
         config.applicationNameForUserAgent = "DEZGRE-Mobile/iOS"
         config.userContentController.add(context.coordinator,name:"dezgrePanelColor")
         let themeScript = """
@@ -248,7 +275,7 @@ private struct Panel: UIViewRepresentable {
           const style = document.createElement('style');
           style.id = 'dezgre-ios-edge-to-edge';
           style.textContent = `
-            html { --dz-ios-top: max(env(safe-area-inset-top, 0px), var(--dz-native-top, 0px));
+            html { --dz-ios-top: 0px; /* UIKit reserves status-bar height, not CSS. */
                    --dz-ios-bottom: max(env(safe-area-inset-bottom, 0px), var(--dz-native-bottom, 0px)); }
             html:has(.panelShell) body { margin:0 !important; }
             @media (max-width:900px) {
@@ -387,6 +414,7 @@ private let accent = Color(red:177/255,green:68/255,blue:178/255)
 private struct Root: View {
     @StateObject private var model = Model()
     @State private var passwordVisible = false
+    @Environment(\.scenePhase) private var scenePhase
     var body: some View {
         Group {
             if let url=model.panelURL {
@@ -398,8 +426,8 @@ private struct Root: View {
                                 model.panelDark = (0.299*r+0.587*g+0.114*b) < 0.5
                             }
                             model.panelColor=Color(uiColor:color)
-                        },topInset:geometry.safeAreaInsets.top,bottomInset:geometry.safeAreaInsets.bottom)
-                        .id(url).ignoresSafeArea(.container,edges:[.top,.bottom])
+                        },topInset:0,bottomInset:geometry.safeAreaInsets.bottom)
+                        .id(url).ignoresSafeArea(.container,edges:.bottom)
                     }
                     if !model.message.isEmpty {
                         VStack(spacing:8) {
@@ -432,6 +460,13 @@ private struct Root: View {
                 }.background(bg.ignoresSafeArea()).preferredColorScheme(.light)
             }
         }.tint(accent).task { await model.start() }
+        .task(id:scenePhase) {
+            guard scenePhase == .active else{return}
+            while !Task.isCancelled {
+                await model.syncSounds()
+                try? await Task.sleep(nanoseconds:60_000_000_000)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for:PushDelegate.tokenChanged)) { _ in Task { await model.syncPush() } }
         .onReceive(NotificationCenter.default.publisher(for:PushDelegate.failed)) { _ in
             if let issue=PushDelegate.currentIssue { model.reportPushIssue(issue) }

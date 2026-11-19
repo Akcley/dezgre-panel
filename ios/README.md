@@ -12,3 +12,6 @@ Limits: first port not tested on an iPhone. The panel is loaded using the server
 
 ## 0.1.33
 Ports the Android login layout and store selection, removes the native permanent toolbar, requests notification permission and registers a live APNs token via existing PUT /notifications/devices. No invented tokens or fake pushes. Unsigned IPA is for UI testing; APNs requires a compatible signed entitlement and backend APNS_* configuration. A signing profile must authorize push; the signed workflow selects the profile's APNs environment. Notification tap routing, custom sounds, web logout transition and real device delivery remain unverified. Android and production untouched.
+
+## 0.1.37
+Native status-bar safe area, bottom edge remains extended. WebKit playback follows Android gesture setting. Persistent device ID and recovery for stale refresh tokens. Prefetches scoped custom sound files from existing config into Library/Sounds as short PCM CAF; APNs server must reference matching filenames. Real-device media, background notifications, Apple signing and App Store readiness require verification. Android SMS gateway is not available on iOS.
