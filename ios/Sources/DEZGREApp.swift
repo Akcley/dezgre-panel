@@ -86,6 +86,7 @@ private struct Store: Identifiable {
     @Published var panelURL: URL?
     @Published var hasSession = false
     @Published var panelColor = Color(uiColor: .systemBackground)
+    @Published var panelDark = false
     @Published var pushIssue: String?
     private var reportedPushIssue = ""
     private let api = API()
@@ -186,7 +187,7 @@ private struct Store: Identifiable {
         do {
             _ = try await api.request("PUT", "/notifications/devices", bearer:access, body:[
                 "platform":"ios", "provider":"apns", "pushToken":token,
-                "deviceId":deviceId, "appVersion":"0.1.35"
+                "deviceId":deviceId, "appVersion":"0.1.36"
             ])
             if tokens["access"] == access { pushRegisteredFor = identity }
             logger.info("APNs device registered in DEZGRE")
@@ -231,6 +232,8 @@ private struct Panel: UIViewRepresentable {
     let onError: (String) -> Void
     let onLogin: () -> Void
     let onColor: (UIColor) -> Void
+    let topInset: CGFloat
+    let bottomInset: CGFloat
     func makeCoordinator() -> Coordinator { Coordinator(initialHost:url.host ?? "", onError:onError, onLogin:onLogin,onColor:onColor) }
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -240,25 +243,57 @@ private struct Panel: UIViewRepresentable {
         config.userContentController.add(context.coordinator,name:"dezgrePanelColor")
         let themeScript = """
         (() => {
+          const root = document.documentElement;
+          if (!root) return;
+          const style = document.createElement('style');
+          style.id = 'dezgre-ios-edge-to-edge';
+          style.textContent = `
+            html { --dz-ios-top: max(env(safe-area-inset-top, 0px), var(--dz-native-top, 0px));
+                   --dz-ios-bottom: max(env(safe-area-inset-bottom, 0px), var(--dz-native-bottom, 0px)); }
+            html:has(.panelShell) body { margin:0 !important; }
+            @media (max-width:900px) {
+              .panelShell { padding-top:calc(var(--panel-mobile-topbar-height,58px) + var(--dz-ios-top)) !important;
+                min-height:100dvh !important; box-sizing:border-box !important; }
+              .panelShell > .panelMobileTopbar { box-sizing:border-box !important;
+                padding-top:calc(8px + var(--dz-ios-top)) !important;
+                height:calc(var(--panel-mobile-topbar-height,58px) + var(--dz-ios-top)) !important;
+                min-height:calc(var(--panel-mobile-topbar-height,58px) + var(--dz-ios-top)) !important; }
+              .panelShell > .panelContent { box-sizing:border-box !important; padding-bottom:calc(var(--dz-ios-bottom) + var(--dz-content-bottom, 52px)) !important; }
+              .panelShell > .panelSidebar { padding-top:calc(24px + var(--dz-ios-top)) !important; padding-bottom:calc(18px + var(--dz-ios-bottom)) !important; }
+            }
+            @media (min-width:901px) {
+              .panelShell { padding-top:var(--dz-ios-top) !important; min-height:100dvh !important; box-sizing:border-box !important; }
+              .panelShell > .panelSidebar { padding-top:calc(20px + var(--dz-ios-top)) !important; }
+              .panelShell > .panelContent { padding-bottom:calc(76px + var(--dz-ios-bottom)) !important; }
+            }
+            html:not(:has(.panelShell)) body { padding-top:var(--dz-ios-top); padding-bottom:var(--dz-ios-bottom); }
+          `;
           let previous = '';
+          let scheduled = false;
           function update() {
-            const node = document.querySelector('.panelContent') || document.querySelector('.panelShell') || document.body;
+            scheduled=false;
+            const shell=document.querySelector('.panelShell');
+            const top=document.querySelector('.panelMobileTopbar');
+            const content=document.querySelector('.panelContent');
+            if (!style.isConnected && document.head) {
+              if (content) {
+                const saved = getComputedStyle(content).paddingBottom;
+                if (saved) root.style.setProperty('--dz-content-bottom',saved);
+              }
+              document.head.appendChild(style);
+            }
+            const meta=document.querySelector('meta[name="viewport"]');
+            if (meta && !/viewport-fit\\s*=\\s*cover/i.test(meta.content)) meta.content=meta.content.replace(/,?\\s*viewport-fit\\s*=\\s*[^,]+/i,'')+', viewport-fit=cover';
+            const node=top || shell || document.body;
             if (!node) return;
-            let c = '';
-            for (let n=node; n; n=n.parentElement) {
-              const color=getComputedStyle(n).backgroundColor;
-              if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') { c=color; break; }
-            }
-            if (c && c !== previous) {
-              previous=c;
-              window.webkit.messageHandlers.dezgrePanelColor.postMessage(c);
-            }
+            let c=getComputedStyle(node).backgroundColor;
+            if (!c || c==='transparent' || c==='rgba(0, 0, 0, 0)') c=getComputedStyle(shell || document.body).backgroundColor;
+            if (c && c!==previous) {previous=c; window.webkit.messageHandlers.dezgrePanelColor.postMessage(c);}
           }
-          window.addEventListener('pageshow',update);
-          window.addEventListener('load',update);
-          if (document.documentElement) {
-            new MutationObserver(update).observe(document.documentElement,{attributes:true,childList:true,subtree:true,attributeFilter:['class','style','data-theme']});
-          }
+          function queue() { if (!scheduled) {scheduled=true;requestAnimationFrame(update);} }
+          window.addEventListener('pageshow',queue);
+          window.addEventListener('resize',queue);
+          new MutationObserver(queue).observe(root,{attributes:true,childList:true,subtree:true,attributeFilter:['class','style','data-theme','data-panel-theme']});
           update();
         })();
         """
@@ -274,7 +309,9 @@ private struct Panel: UIViewRepresentable {
         web.load(URLRequest(url:url))
         return web
     }
-    func updateUIView(_ web: WKWebView, context: Context) {}
+    func updateUIView(_ web: WKWebView, context: Context) {
+        context.coordinator.updateInsets(web,top:topInset,bottom:bottomInset)
+    }
     static func dismantleUIView(_ web: WKWebView, coordinator: Coordinator) {
         web.configuration.userContentController.removeScriptMessageHandler(forName:"dezgrePanelColor")
         web.navigationDelegate=nil
@@ -286,6 +323,16 @@ private struct Panel: UIViewRepresentable {
         let onError: (String) -> Void
         let onLogin: () -> Void
         let onColor:(UIColor)->Void
+        private var safeTop:CGFloat=0
+        private var safeBottom:CGFloat=0
+        func updateInsets(_ web:WKWebView,top:CGFloat,bottom:CGFloat) {
+            safeTop=top; safeBottom=bottom
+            injectInsets(web)
+        }
+        private func injectInsets(_ web:WKWebView) {
+            let js="document.documentElement?.style.setProperty('--dz-native-top','" + String(Double(safeTop)) + "px');document.documentElement?.style.setProperty('--dz-native-bottom','" + String(Double(safeBottom)) + "px');"
+            web.evaluateJavaScript(js,completionHandler:nil)
+        }
         init(initialHost:String, onError:@escaping (String)->Void, onLogin:@escaping ()->Void,onColor:@escaping (UIColor)->Void) {
             self.initialHost=initialHost; self.onError=onError; self.onLogin=onLogin; self.onColor=onColor
         }
@@ -295,12 +342,13 @@ private struct Panel: UIViewRepresentable {
                 value.hasPrefix("rgb") else { return }
             let numbers=value.split(whereSeparator:{ !$0.isNumber && $0 != "." }).compactMap{Double($0)}
             guard numbers.count >= 3, numbers.prefix(3).allSatisfy({ $0 >= 0 && $0 <= 255 }),
-                numbers.count == 3 || (numbers.count == 4 && numbers[3] >= 0.95) else { return }
+                numbers.count == 3 || (numbers.count == 4 && numbers[3] >= 0.5) else { return }
             let color=UIColor(red:CGFloat(numbers[0]/255),green:CGFloat(numbers[1]/255),blue:CGFloat(numbers[2]/255),alpha:1)
             onColor(color)
         }
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             guard let url = webView.url, allowed(url) else { return }
+            injectInsets(webView)
             let path = url.path.lowercased()
             if path == "/panel/login" || path.hasSuffix("/panel/login") || path == "/admin/login" {
                 onLogin()
@@ -343,7 +391,16 @@ private struct Root: View {
         Group {
             if let url=model.panelURL {
                 ZStack(alignment:.bottom) {
-                    Panel(url:url,dataStore:model.webData,onError:{ model.message=$0 },onLogin:{ model.webLoginReached() },onColor:{model.panelColor=Color(uiColor:$0)}).id(url)
+                    GeometryReader { geometry in
+                        Panel(url:url,dataStore:model.webData,onError:{ model.message=$0 },onLogin:{ model.webLoginReached() },onColor:{ color in
+                            var r:CGFloat=0,g:CGFloat=0,b:CGFloat=0,a:CGFloat=0
+                            if color.getRed(&r,green:&g,blue:&b,alpha:&a) {
+                                model.panelDark = (0.299*r+0.587*g+0.114*b) < 0.5
+                            }
+                            model.panelColor=Color(uiColor:color)
+                        },topInset:geometry.safeAreaInsets.top,bottomInset:geometry.safeAreaInsets.bottom)
+                        .id(url).ignoresSafeArea(.container,edges:[.top,.bottom])
+                    }
                     if !model.message.isEmpty {
                         VStack(spacing:8) {
                             Text(model.message).font(.footnote)
@@ -351,7 +408,8 @@ private struct Root: View {
                         }.padding().background(.regularMaterial,in:RoundedRectangle(cornerRadius:12)).padding()
                     }
                 }.frame(maxWidth:.infinity,maxHeight:.infinity)
-                    .background(model.panelColor.ignoresSafeArea(edges:.bottom))
+                    .background(model.panelColor.ignoresSafeArea())
+                    .preferredColorScheme(model.panelDark ? .dark : .light)
             } else {
                 ScrollView {
                     VStack(spacing:0) {
@@ -470,7 +528,14 @@ final class PushDelegate: NSObject, UIApplicationDelegate {
     static func request() {
         UNUserNotificationCenter.current().requestAuthorization(options:[.alert,.sound,.badge]) { granted,error in
             DispatchQueue.main.async {
-                if granted { UIApplication.shared.registerForRemoteNotifications() }
+                if granted {
+                    UIApplication.shared.registerForRemoteNotifications()
+                    DispatchQueue.main.asyncAfter(deadline:.now()+15) {
+                        guard Self.currentToken == nil, Self.currentIssue == nil else { return }
+                        Self.currentIssue = "El permiso está concedido, pero Apple todavía no entregó un token APNs. Verifica la firma y la conexión. No se confirmó el registro push."
+                        NotificationCenter.default.post(name:Self.failed,object:nil)
+                    }
+                }
                 else if let error=error {
                     Self.currentIssue="No se pudo solicitar el permiso de notificaciones: " + String((error as NSError).code)
                     NotificationCenter.default.post(name:Self.failed,object:nil)

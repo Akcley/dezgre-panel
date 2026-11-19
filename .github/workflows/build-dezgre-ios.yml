@@ -1,4 +1,4 @@
-name: Build DEZGRE iOS IPA 0.1.35
+name: Build DEZGRE iOS IPA 0.1.36
 on:
   workflow_dispatch:
   push:
@@ -25,12 +25,12 @@ jobs:
           xcodebuild -project ios/DEZGRE.xcodeproj -scheme DEZGRE -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/ios-unsigned" CODE_SIGNING_ALLOWED=NO build
           mkdir -p "$RUNNER_TEMP/unsigned/Payload" ios-dist
           cp -R "$RUNNER_TEMP/ios-unsigned/Build/Products/Release-iphoneos/DEZGRE.app" "$RUNNER_TEMP/unsigned/Payload/"
-          (cd "$RUNNER_TEMP/unsigned" && zip -qry "$GITHUB_WORKSPACE/ios-dist/DEZGRE-Mobile-v0.1.35-UNSIGNED.ipa" Payload)
-          unzip -t ios-dist/DEZGRE-Mobile-v0.1.35-UNSIGNED.ipa >/dev/null
-          shasum -a 256 ios-dist/DEZGRE-Mobile-v0.1.35-UNSIGNED.ipa > ios-dist/DEZGRE-Mobile-v0.1.35-UNSIGNED.ipa.sha256
+          (cd "$RUNNER_TEMP/unsigned" && zip -qry "$GITHUB_WORKSPACE/ios-dist/DEZGRE-Mobile-v0.1.36-UNSIGNED.ipa" Payload)
+          unzip -t ios-dist/DEZGRE-Mobile-v0.1.36-UNSIGNED.ipa >/dev/null
+          shasum -a 256 ios-dist/DEZGRE-Mobile-v0.1.36-UNSIGNED.ipa > ios-dist/DEZGRE-Mobile-v0.1.36-UNSIGNED.ipa.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: DEZGRE-Mobile-v0.1.35-iOS-UNSIGNED
+          name: DEZGRE-Mobile-v0.1.36-iOS-UNSIGNED
           path: ios-dist/*UNSIGNED*
           if-no-files-found: error
       - name: Optional Apple signing
@@ -76,13 +76,13 @@ jobs:
           test -s "$APP/embedded.mobileprovision"
           mkdir -p "$RUNNER_TEMP/signed/Payload"
           cp -R "$APP" "$RUNNER_TEMP/signed/Payload/"
-          (cd "$RUNNER_TEMP/signed" && zip -qry "$GITHUB_WORKSPACE/ios-dist/DEZGRE-Mobile-v0.1.35-SIGNED.ipa" Payload)
-          unzip -t ios-dist/DEZGRE-Mobile-v0.1.35-SIGNED.ipa >/dev/null
-          shasum -a 256 ios-dist/DEZGRE-Mobile-v0.1.35-SIGNED.ipa > ios-dist/DEZGRE-Mobile-v0.1.35-SIGNED.ipa.sha256
+          (cd "$RUNNER_TEMP/signed" && zip -qry "$GITHUB_WORKSPACE/ios-dist/DEZGRE-Mobile-v0.1.36-SIGNED.ipa" Payload)
+          unzip -t ios-dist/DEZGRE-Mobile-v0.1.36-SIGNED.ipa >/dev/null
+          shasum -a 256 ios-dist/DEZGRE-Mobile-v0.1.36-SIGNED.ipa > ios-dist/DEZGRE-Mobile-v0.1.36-SIGNED.ipa.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: DEZGRE-Mobile-v0.1.35-iOS-SIGNED
+          name: DEZGRE-Mobile-v0.1.36-iOS-SIGNED
           path: |
-            ios-dist/DEZGRE-Mobile-v0.1.35-SIGNED.ipa
-            ios-dist/DEZGRE-Mobile-v0.1.35-SIGNED.ipa.sha256
+            ios-dist/DEZGRE-Mobile-v0.1.36-SIGNED.ipa
+            ios-dist/DEZGRE-Mobile-v0.1.36-SIGNED.ipa.sha256
           if-no-files-found: ignore
