@@ -274,7 +274,7 @@ private struct Panel: UIViewRepresentable {
 private let bg = Color(red:247/255,green:247/255,blue:247/255)
 private let ink = Color(red:48/255,green:55/255,blue:79/255)
 private let muted = Color(red:139/255,green:146/255,blue:162/255)
-private let border = Color(red:225/255,green:228/255,blue:235/255)
+private let fieldBorderColor = Color(red:225/255,green:228/255,blue:235/255)
 private let accent = Color(red:177/255,green:68/255,blue:178/255)
 
 private struct Root: View {
@@ -325,14 +325,14 @@ private struct Root: View {
             Text("DEZGRE MOBILE").font(.system(size:14,weight:.bold)).tracking(1.68).foregroundColor(ink)
             Text("Accede a tu operación").font(.system(size:25,weight:.bold)).foregroundColor(ink).padding(.top,9).padding(.bottom,34)
             TextField("Correo electrónico",text:$model.email).keyboardType(.emailAddress).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled()
-                .font(.system(size:16)).foregroundColor(ink).padding(.horizontal,16).frame(height:58).background(Color.white,in:RoundedRectangle(cornerRadius:13)).overlay(RoundedRectangle(cornerRadius:13).stroke(border,lineWidth:1))
+                .font(.system(size:16)).foregroundColor(ink).padding(.horizontal,16).frame(height:58).background(Color.white,in:RoundedRectangle(cornerRadius:13)).overlay(RoundedRectangle(cornerRadius:13).stroke(fieldBorderColor,lineWidth:1))
             HStack(spacing:0) {
                 Group {
                     if passwordVisible { TextField("Contraseña",text:$model.password).textInputAutocapitalization(.never).autocorrectionDisabled() }
                     else { SecureField("Contraseña",text:$model.password).textContentType(.password) }
                 }.font(.system(size:16)).foregroundColor(ink).padding(.leading,16)
                 Button(passwordVisible ? "Ocultar" : "Mostrar") { passwordVisible.toggle() }.font(.system(size:12,weight:.bold)).foregroundColor(accent).frame(width:78,height:58)
-            }.frame(height:58).background(Color.white,in:RoundedRectangle(cornerRadius:13)).overlay(RoundedRectangle(cornerRadius:13).stroke(border,lineWidth:1)).padding(.top,12)
+            }.frame(height:58).background(Color.white,in:RoundedRectangle(cornerRadius:13)).overlay(RoundedRectangle(cornerRadius:13).stroke(fieldBorderColor,lineWidth:1)).padding(.top,12)
             errorText.padding(.top,14)
             Button { Task { await model.login() } } label: {
                 Text(model.busy ? "Entrando…" : "Entrar").font(.system(size:16,weight:.bold)).foregroundColor(.white).frame(maxWidth:.infinity).frame(height:56).background(accent,in:RoundedRectangle(cornerRadius:13))
@@ -346,22 +346,44 @@ private struct Root: View {
             Text("Tu usuario tiene acceso a varias tiendas. Elige con cuál quieres trabajar en esta sesión.").font(.system(size:14)).foregroundColor(muted).padding(.bottom,22)
             ForEach(model.stores) { store in
                 Button { Task { await model.select(store) } } label: {
-                    VStack(alignment:.leading,spacing:10) {
-                        HStack(spacing:12) {
-                            Text(String(store.name.prefix(1)).uppercased()).font(.system(size:18,weight:.bold)).foregroundColor(.white).frame(width:44,height:44).background(accent,in:RoundedRectangle(cornerRadius:10))
-                            VStack(alignment:.leading,spacing:3) {
-                                Text(store.name).font(.system(size:18,weight:.bold)).foregroundColor(ink)
-                                Text(store.role).font(.system(size:12,weight:.bold)).foregroundColor(accent)
-                            }
-                            Spacer()
-                            Image(systemName:"chevron.right").foregroundColor(muted)
-                        }
-                        if !store.domain.isEmpty { Text(store.domain).font(.system(size:12)).foregroundColor(muted) }
-                    }.padding(14).background(Color.white,in:RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(border,lineWidth:1))
+                    StoreCard(store:store)
                 }.buttonStyle(.plain).padding(.bottom,12)
             }
             errorText
             Button("Volver",action:model.backToLogin).font(.system(size:14,weight:.semibold)).padding(.top,8)
+        }
+    }
+}
+
+private struct StoreCard: View {
+    let store: Store
+    var body: some View {
+        VStack(alignment:.leading, spacing:10) {
+            HStack(spacing:12) {
+                avatar
+                identity
+                Spacer()
+                Image(systemName:"chevron.right").foregroundColor(muted)
+            }
+            if !store.domain.isEmpty {
+                Text(store.domain).font(.system(size:12)).foregroundColor(muted)
+            }
+        }
+        .padding(14)
+        .background(Color.white, in:RoundedRectangle(cornerRadius:14))
+        .overlay { RoundedRectangle(cornerRadius:14).stroke(fieldBorderColor,lineWidth:1) }
+    }
+    private var avatar: some View {
+        Text(String(store.name.prefix(1)).uppercased())
+            .font(.system(size:18,weight:.bold))
+            .foregroundColor(.white)
+            .frame(width:44,height:44)
+            .background(accent,in:RoundedRectangle(cornerRadius:10))
+    }
+    private var identity: some View {
+        VStack(alignment:.leading,spacing:3) {
+            Text(store.name).font(.system(size:18,weight:.bold)).foregroundColor(ink)
+            Text(store.role).font(.system(size:12,weight:.bold)).foregroundColor(accent)
         }
     }
 }
